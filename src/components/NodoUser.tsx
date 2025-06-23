@@ -1,0 +1,228 @@
+import React, { useState, useEffect } from 'react';
+import { useApp } from '../contexts/AppContext';
+import NodeHeader from './nodo/NodeHeader';
+import QueueDisplay from './nodo/QueueDisplay';
+import CarouselDisplay from './nodo/CarouselDisplay';
+import StatusBar from './nodo/StatusBar';
+import AudioManager from './nodo/AudioManager';
+
+export default function NodoUser() {
+  const { state, dispatch } = useApp();
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [highlightedTicket, setHighlightedTicket] = useState<string | null>(null);
+  const [lastAnnouncedTicket, setLastAnnouncedTicket] = useState<string | null>(null);
+
+  // CRITICAL: Get node configuration from independent Firebase table
+  const nodeConfig = React.useMemo(() => {
+    if (state.nodeConfiguration) {
+      console.log('📊 Using configuration from independent Firebase table:', state.nodeConfiguration);
+      return {
+        // Display Settings
+        autoRotationInterval: state.nodeConfiguration.autoRotationInterval,
+        showQueueInfo: state.nodeConfiguration.showQueueInfo,
+        showCompanyLogo: state.nodeConfiguration.showCompanyLogo,
+        maxTicketsDisplayed: state.nodeConfiguration.maxTicketsDisplayed,
+        showDateTime: state.nodeConfiguration.showDateTime,
+        showConnectionStatus: state.nodeConfiguration.showConnectionStatus,
+        showHeader: state.nodeConfiguration.showHeader ?? true,
+        showCarousel: state.nodeConfiguration.showCarousel ?? true, // NEW: Carousel visibility
+        compactMode: state.nodeConfiguration.compactMode,
+        
+        // Audio Settings
+        enableAudio: state.nodeConfiguration.enableAudio,
+        audioVolume: state.nodeConfiguration.audioVolume,
+        selectedVoice: state.nodeConfiguration.selectedVoice,
+        speechRate: state.nodeConfiguration.speechRate,
+        
+        // Visual Settings
+        backgroundColor: state.nodeConfiguration.backgroundColor,
+        headerColor: state.nodeConfiguration.headerColor,
+        textColor: state.nodeConfiguration.textColor,
+        accentColor: state.nodeConfiguration.accentColor,
+        
+        // Animation Settings
+        enableAnimations: state.nodeConfiguration.enableAnimations,
+        highlightDuration: state.nodeConfiguration.highlightDuration,
+        transitionDuration: state.nodeConfiguration.transitionDuration,
+        
+        // Content Settings
+        showImageDescriptions: state.nodeConfiguration.showImageDescriptions,
+        showImageIndicators: state.nodeConfiguration.showImageIndicators,
+        pauseOnHover: state.nodeConfiguration.pauseOnHover,
+        
+        // NEW: Carousel Text Settings
+        carouselTitle: state.nodeConfiguration.carouselTitle || 'Publicidad',
+        enableScrollingText: state.nodeConfiguration.enableScrollingText ?? false,
+        scrollingSpeed: state.nodeConfiguration.scrollingSpeed || 5,
+      };
+    } else {
+      console.log('⚠️ No configuration found in independent table, using defaults');
+      return {
+        autoRotationInterval: 5000,
+        showQueueInfo: true,
+        showCompanyLogo: true,
+        maxTicketsDisplayed: 6,
+        showDateTime: true,
+        showConnectionStatus: true,
+        showHeader: true,
+        showCarousel: true, // NEW: Default to show carousel
+        compactMode: false,
+        enableAudio: true,
+        audioVolume: 0.8,
+        selectedVoice: 'auto-female',
+        speechRate: 0.75,
+        backgroundColor: '#F1F5F9',
+        headerColor: '#3B82F6',
+        textColor: '#1F2937',
+        accentColor: '#10B981',
+        enableAnimations: true,
+        highlightDuration: 10000,
+        transitionDuration: 1000,
+        showImageDescriptions: true,
+        showImageIndicators: true,
+        pauseOnHover: false,
+        carouselTitle: 'Publicidad', // NEW: Default title
+        enableScrollingText: false, // NEW: Default scrolling disabled
+        scrollingSpeed: 5, // NEW: Default speed
+      };
+    }
+  }, [state.nodeConfiguration]);
+
+  // Update time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Carousel auto-rotation with configurable interval
+  useEffect(() => {
+    if (state.carouselImages.length > 0 && nodeConfig.showCarousel) {
+      const interval = setInterval(() => {
+        setCurrentImageIndex((prevIndex) => 
+          (prevIndex + 1) % state.carouselImages.length
+        );
+      }, nodeConfig.autoRotationInterval);
+
+      return () => clearInterval(interval);
+    }
+  }, [state.carouselImages.length, nodeConfig.autoRotationInterval, nodeConfig.showCarousel]);
+
+  const handleBack = () => {
+    dispatch({ type: 'SET_CURRENT_USER', payload: null });
+  };
+
+  // Get tickets being served - sorted by most recent first, limited by configuration
+  const beingServedTickets = state.tickets
+    .filter(ticket => ticket.status === 'being_served')
+    .sort((a, b) => {
+      // Highlighted ticket goes first
+      if (highlightedTicket === a.id && highlightedTicket !== b.id) return -1;
+      if (highlightedTicket === b.id && highlightedTicket !== a.id) return 1;
+      // Then by served time (most recent first)
+      const aTime = a.servedAt ? new Date(a.servedAt).getTime() : 0;
+      const bTime = b.servedAt ? new Date(b.servedAt).getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, nodeConfig.maxTicketsDisplayed);
+
+  // Get next tickets in queue - limited to 2 only
+  const waitingTickets = state.tickets
+    .filter(ticket => ticket.status === 'waiting')
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(0, 2);
+
+  // Apply custom styles from configuration
+  const customStyles = {
+    backgroundColor: nodeConfig.backgroundColor,
+    color: nodeConfig.textColor,
+  };
+
+  // Calculate dynamic height based on header visibility - OPTIMIZED FOR FULL SCREEN
+  const contentHeight = nodeConfig.showHeader ? 'h-[calc(100vh-120px)]' : 'h-[calc(100vh-40px)]';
+
+  // NEW: Calculate layout based on carousel visibility
+  const queueWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-full';
+  const carouselWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-0';
+
+  return (
+    <div className="min-h-screen text-gray-800" style={customStyles}>
+      {/* Conditional Header Component - REDUCED HEIGHT */}
+      {nodeConfig.showHeader && (
+        <NodeHeader
+          onBack={handleBack}
+          currentTime={currentTime}
+          isConnected={state.isFirebaseConnected}
+          audioEnabled={nodeConfig.enableAudio}
+          showDateTime={nodeConfig.showDateTime}
+          showConnectionStatus={nodeConfig.showConnectionStatus}
+          headerColor={nodeConfig.headerColor}
+        />
+      )}
+
+      <div className={`flex ${contentHeight}`}>
+        {/* Queue Information - DYNAMIC WIDTH BASED ON CAROUSEL VISIBILITY */}
+        <div className={`${queueWidth} p-3 transition-all duration-500`}>
+          <QueueDisplay
+            beingServedTickets={beingServedTickets}
+            waitingTickets={waitingTickets}
+            employees={state.employees}
+            highlightedTicket={highlightedTicket}
+            maxTicketsDisplayed={nodeConfig.maxTicketsDisplayed}
+            showQueueInfo={nodeConfig.showQueueInfo}
+            textColor={nodeConfig.textColor}
+            accentColor={nodeConfig.accentColor}
+            enableAnimations={nodeConfig.enableAnimations}
+            isFullWidth={!nodeConfig.showCarousel} // NEW: Pass full width state
+          />
+        </div>
+
+        {/* Advertisement Carousel - CONDITIONAL RENDERING */}
+        {nodeConfig.showCarousel && (
+          <div className={`${carouselWidth} p-3 transition-all duration-500`}>
+            <CarouselDisplay
+              images={state.carouselImages}
+              currentImageIndex={currentImageIndex}
+              showImageDescriptions={nodeConfig.showImageDescriptions}
+              showImageIndicators={nodeConfig.showImageIndicators}
+              enableAnimations={nodeConfig.enableAnimations}
+              textColor={nodeConfig.textColor}
+              carouselTitle={nodeConfig.carouselTitle} // NEW: Custom title
+              enableScrollingText={nodeConfig.enableScrollingText} // NEW: Scrolling text
+              scrollingSpeed={nodeConfig.scrollingSpeed} // NEW: Scrolling speed
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Status Bar Component - REDUCED HEIGHT */}
+      <StatusBar
+        waitingTicketsCount={waitingTickets.length}
+        beingServedTicketsCount={beingServedTickets.length}
+        activeEmployeesCount={state.employees.filter(e => e.isActive && !e.isPaused).length}
+        currentTime={currentTime}
+        audioEnabled={nodeConfig.enableAudio}
+        selectedVoice={nodeConfig.selectedVoice}
+        accentColor={nodeConfig.accentColor}
+        showCarousel={nodeConfig.showCarousel} // NEW: Pass carousel visibility
+      />
+
+      {/* Audio Manager Component */}
+      <AudioManager
+        tickets={state.tickets}
+        employees={state.employees}
+        lastAnnouncedTicket={lastAnnouncedTicket}
+        onTicketAnnounced={setLastAnnouncedTicket}
+        onTicketHighlighted={setHighlightedTicket}
+        audioEnabled={nodeConfig.enableAudio}
+        audioVolume={nodeConfig.audioVolume}
+        selectedVoice={nodeConfig.selectedVoice}
+        speechRate={nodeConfig.speechRate}
+        highlightDuration={nodeConfig.highlightDuration}
+      />
+    </div>
+  );
+}
