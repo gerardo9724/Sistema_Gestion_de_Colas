@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { CarouselImage } from '../../types';
 
 interface CarouselDisplayProps {
@@ -25,11 +25,78 @@ export default function CarouselDisplay({
   scrollingSpeed
 }: CarouselDisplayProps) {
   
-  // Calculate animation duration for single pass scrolling
-  // Speed 1 = 15s (very slow), Speed 10 = 3s (fast)
-  const animationDuration = Math.max(3, 18 - (scrollingSpeed * 1.5));
+  const marqueeContentRef = useRef<HTMLDivElement>(null);
+  const animationFrameIdRef = useRef<number>();
+  const isAnimatingRef = useRef<boolean>(false);
   
-  // Single pass scrolling text component (right to left, no loop)
+  // JavaScript-based marquee implementation
+  useEffect(() => {
+    const marqueeContent = marqueeContentRef.current;
+    if (!marqueeContent) return;
+
+    const startMarquee = () => {
+      if (!isAnimatingRef.current) {
+        isAnimatingRef.current = true;
+        animationFrameIdRef.current = requestAnimationFrame(updateMarquee);
+      }
+    };
+
+    const stopMarquee = () => {
+      isAnimatingRef.current = false;
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+      }
+    };
+
+    const updateMarquee = () => {
+      if (!isAnimatingRef.current || !marqueeContent) return;
+
+      const containerWidth = (marqueeContent.parentElement as HTMLElement).offsetWidth;
+      const contentWidth = marqueeContent.offsetWidth;
+      
+      // Get current transform value
+      const transform = getComputedStyle(marqueeContent).transform;
+      let currentTranslateX = 0;
+      
+      if (transform !== 'none') {
+        const matrix = transform.split(',');
+        if (matrix.length >= 5) {
+          currentTranslateX = parseFloat(matrix[4]) || 0;
+        }
+      }
+
+      // Calculate scroll speed based on scrollingSpeed (1-10 scale)
+      // Speed 1 = 0.5px per frame (slow), Speed 10 = 5px per frame (fast)
+      const scrollSpeedPixels = 0.5 + (scrollingSpeed - 1) * 0.5;
+      let newTranslateX = currentTranslateX - scrollSpeedPixels;
+
+      // Reset position when text completely exits on the left
+      if (newTranslateX <= -contentWidth) {
+        newTranslateX = containerWidth; // Start from right edge of container
+      }
+
+      marqueeContent.style.transform = `translateX(${newTranslateX}px)`;
+      animationFrameIdRef.current = requestAnimationFrame(updateMarquee);
+    };
+
+    // Start or stop marquee based on enableScrollingText
+    if (enableScrollingText) {
+      // Initialize position to start from right edge
+      marqueeContent.style.transform = `translateX(${marqueeContent.parentElement?.offsetWidth || 0}px)`;
+      startMarquee();
+    } else {
+      stopMarquee();
+      // Reset to center position when scrolling is disabled
+      marqueeContent.style.transform = 'translateX(0)';
+    }
+
+    // Cleanup function
+    return () => {
+      stopMarquee();
+    };
+  }, [enableScrollingText, scrollingSpeed, carouselTitle]);
+
+  // Scrolling text component using JavaScript animation
   const ScrollingTitle = ({ text }: { text: string }) => {
     if (!enableScrollingText) {
       return <span>{text}</span>;
@@ -38,25 +105,14 @@ export default function CarouselDisplay({
     return (
       <div className="overflow-hidden whitespace-nowrap relative w-full">
         <div 
+          ref={marqueeContentRef}
           className="inline-block"
           style={{
-            animation: `singlePassScroll ${animationDuration}s linear forwards`,
+            willChange: 'transform', // Optimize for animations
           }}
         >
           {text}
         </div>
-        
-        {/* Single pass CSS keyframes - starts at 100% (off-screen right) and ends at -100% (off-screen left) */}
-        <style jsx>{`
-          @keyframes singlePassScroll {
-            0% {
-              transform: translateX(100%);
-            }
-            100% {
-              transform: translateX(-100%);
-            }
-          }
-        `}</style>
       </div>
     );
   };
@@ -64,7 +120,7 @@ export default function CarouselDisplay({
   if (images.length === 0) {
     return (
       <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
-        {/* Title with single pass scrolling */}
+        {/* Title with JavaScript-based scrolling */}
         <div className="w-full mb-3">
           <h2 className="text-xl font-bold text-center w-full" style={{ color: textColor }}>
             <ScrollingTitle text={carouselTitle} />
@@ -86,7 +142,7 @@ export default function CarouselDisplay({
 
   return (
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
-      {/* Title container with single pass scrolling */}
+      {/* Title container with JavaScript-based scrolling */}
       <div className="w-full mb-2">
         <h2 className="text-lg font-bold text-center w-full" style={{ color: textColor }}>
           <ScrollingTitle text={carouselTitle} />
