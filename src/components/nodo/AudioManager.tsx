@@ -55,10 +55,10 @@ export default function AudioManager({
           announceTicket(newlyServedTicket.number, employee.name);
         }, 800);
         
-        // SECOND announcement after 4 seconds (repeat)
+        // SECOND announcement after 4.5 seconds (repeat) - FIXED: Longer delay to avoid cutting off
         setTimeout(() => {
           announceTicket(newlyServedTicket.number, employee.name);
-        }, 4000);
+        }, 4500);
         
         // Remove highlight after configured duration
         setTimeout(() => {
@@ -97,83 +97,86 @@ export default function AudioManager({
       // Cancel any ongoing speech
       speechSynthesis.cancel();
       
-      // More natural and softer announcement text
-      const text = `Ticket número ${ticketNumber.toString().padStart(3, '0')}. Favor dirigirse con ${employeeName}`;
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Wait for voices to load
-      const setVoiceAndSpeak = () => {
-        const voices = speechSynthesis.getVoices();
+      // FIXED: Wait a moment to ensure previous speech is cancelled
+      setTimeout(() => {
+        // More natural and softer announcement text
+        const text = `Ticket número ${ticketNumber.toString().padStart(3, '0')}. Favor dirigirse con ${employeeName}`;
         
-        let selectedVoiceObj = null;
+        const utterance = new SpeechSynthesisUtterance(text);
         
-        // If specific voice is selected, try to find it
-        if (selectedVoice !== 'auto-male' && selectedVoice !== 'auto-female') {
-          selectedVoiceObj = voices.find(voice => 
-            voice.name.toLowerCase().includes(selectedVoice.toLowerCase())
-          );
-        }
-        
-        // If no specific voice found, use auto selection
-        if (!selectedVoiceObj) {
-          const isAutoMale = selectedVoice === 'auto-male' || 
-                           selectedVoice.includes('Pablo') || 
-                           selectedVoice.includes('Raul') ||
-                           selectedVoice.includes('Jorge') ||
-                           selectedVoice.includes('Juan') ||
-                           selectedVoice.includes('Carlos') ||
-                           selectedVoice.includes('Diego') ||
-                           selectedVoice.includes('Andrés') ||
-                           selectedVoice.includes('Miguel');
+        // Wait for voices to load
+        const setVoiceAndSpeak = () => {
+          const voices = speechSynthesis.getVoices();
           
-          if (isAutoMale) {
-            // Find male voice
-            const maleVoices = ['Pablo', 'Raul', 'Jorge', 'Juan', 'Carlos', 'Diego', 'Andrés', 'Miguel'];
-            for (const maleName of maleVoices) {
-              selectedVoiceObj = voices.find(voice => 
-                voice.lang.includes('es') && 
-                voice.name.toLowerCase().includes(maleName.toLowerCase())
-              );
-              if (selectedVoiceObj) break;
-            }
-          } else {
-            // Find female voice
-            const femaleVoices = ['Helena', 'Sabina', 'Mónica', 'Paulina', 'Esperanza', 'Marisol'];
-            for (const femaleName of femaleVoices) {
-              selectedVoiceObj = voices.find(voice => 
-                voice.lang.includes('es') && 
-                voice.name.toLowerCase().includes(femaleName.toLowerCase())
-              );
-              if (selectedVoiceObj) break;
+          let selectedVoiceObj = null;
+          
+          // If specific voice is selected, try to find it
+          if (selectedVoice !== 'auto-male' && selectedVoice !== 'auto-female') {
+            selectedVoiceObj = voices.find(voice => 
+              voice.name.toLowerCase().includes(selectedVoice.toLowerCase())
+            );
+          }
+          
+          // If no specific voice found, use auto selection
+          if (!selectedVoiceObj) {
+            const isAutoMale = selectedVoice === 'auto-male' || 
+                             selectedVoice.includes('Pablo') || 
+                             selectedVoice.includes('Raul') ||
+                             selectedVoice.includes('Jorge') ||
+                             selectedVoice.includes('Juan') ||
+                             selectedVoice.includes('Carlos') ||
+                             selectedVoice.includes('Diego') ||
+                             selectedVoice.includes('Andrés') ||
+                             selectedVoice.includes('Miguel');
+            
+            if (isAutoMale) {
+              // Find male voice
+              const maleVoices = ['Pablo', 'Raul', 'Jorge', 'Juan', 'Carlos', 'Diego', 'Andrés', 'Miguel'];
+              for (const maleName of maleVoices) {
+                selectedVoiceObj = voices.find(voice => 
+                  voice.lang.includes('es') && 
+                  voice.name.toLowerCase().includes(maleName.toLowerCase())
+                );
+                if (selectedVoiceObj) break;
+              }
+            } else {
+              // Find female voice
+              const femaleVoices = ['Helena', 'Sabina', 'Mónica', 'Paulina', 'Esperanza', 'Marisol'];
+              for (const femaleName of femaleVoices) {
+                selectedVoiceObj = voices.find(voice => 
+                  voice.lang.includes('es') && 
+                  voice.name.toLowerCase().includes(femaleName.toLowerCase())
+                );
+                if (selectedVoiceObj) break;
+              }
             }
           }
-        }
-        
-        // Final fallback to any Spanish voice
-        if (!selectedVoiceObj) {
-          selectedVoiceObj = voices.find(voice => voice.lang.includes('es'));
-        }
+          
+          // Final fallback to any Spanish voice
+          if (!selectedVoiceObj) {
+            selectedVoiceObj = voices.find(voice => voice.lang.includes('es'));
+          }
 
-        if (selectedVoiceObj) {
-          utterance.voice = selectedVoiceObj;
-        }
-        
-        utterance.lang = 'es-ES';
-        utterance.rate = speechRate;
-        utterance.pitch = 0.9;
-        utterance.volume = audioVolume;
-        
-        speechSynthesis.speak(utterance);
-      };
+          if (selectedVoiceObj) {
+            utterance.voice = selectedVoiceObj;
+          }
+          
+          utterance.lang = 'es-ES';
+          utterance.rate = speechRate;
+          utterance.pitch = 0.9;
+          utterance.volume = audioVolume;
+          
+          speechSynthesis.speak(utterance);
+        };
 
-      // Check if voices are already loaded
-      if (speechSynthesis.getVoices().length > 0) {
-        setVoiceAndSpeak();
-      } else {
-        // Wait for voices to load
-        speechSynthesis.addEventListener('voiceschanged', setVoiceAndSpeak, { once: true });
-      }
+        // Check if voices are already loaded
+        if (speechSynthesis.getVoices().length > 0) {
+          setVoiceAndSpeak();
+        } else {
+          // Wait for voices to load
+          speechSynthesis.addEventListener('voiceschanged', setVoiceAndSpeak, { once: true });
+        }
+      }, 100); // Small delay to ensure speech cancellation
     }
   };
 

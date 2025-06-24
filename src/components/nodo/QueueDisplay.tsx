@@ -27,26 +27,6 @@ export default function QueueDisplay({
   enableAnimations,
   isFullWidth = false
 }: QueueDisplayProps) {
-  
-  const getBeingServedGridCols = () => {
-    const count = beingServedTickets.length;
-    
-    if (isFullWidth) {
-      if (count === 1) return 'grid-cols-1';
-      if (count === 2) return 'grid-cols-2';
-      if (count <= 4) return 'grid-cols-2';
-      if (count <= 6) return 'grid-cols-3';
-      return 'grid-cols-4';
-    } else {
-      if (count === 1) return 'grid-cols-1';
-      if (count === 2) return 'grid-cols-2';
-      if (count <= 4) return 'grid-cols-2';
-      return 'grid-cols-3';
-    }
-  };
-
-  const ticketMinHeight = isFullWidth ? '100px' : '90px';
-  const ticketMaxHeight = isFullWidth ? '120px' : '110px';
 
   return (
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
@@ -56,7 +36,7 @@ export default function QueueDisplay({
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {/* Currently Being Served - IMPROVED SCROLLING LAYOUT */}
+        {/* Currently Being Served - FIXED: Vertical scrolling layout */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
@@ -65,47 +45,49 @@ export default function QueueDisplay({
             </h3>
           </div>
           
-          {/* CRITICAL: Scrollable container with proper height management */}
-          <div className={`flex-1 overflow-y-auto ${isFullWidth ? 'max-h-[400px]' : 'max-h-[320px]'}`}>
+          {/* FIXED: Proper scrollable container with vertical layout */}
+          <div className={`flex-1 overflow-y-auto ${isFullWidth ? 'max-h-[400px]' : 'max-h-[320px]'} pr-2`}>
             {beingServedTickets.length > 0 ? (
-              <div className="space-y-3 pr-2"> {/* Vertical layout with spacing */}
-                {beingServedTickets.map((ticket, index) => {
+              <div className="space-y-3"> {/* FIXED: Vertical layout with proper spacing */}
+                {beingServedTickets.slice(0, maxTicketsDisplayed).map((ticket, index) => {
                   const employee = employees.find(emp => emp.id === ticket.servedBy);
                   const isHighlighted = highlightedTicket === ticket.id;
                   
                   return (
                     <div 
                       key={ticket.id} 
-                      className={`rounded-xl p-3 text-center shadow-lg flex items-center justify-between relative overflow-hidden border-2 ${
+                      className={`rounded-xl p-4 text-center shadow-lg flex items-center justify-between relative overflow-hidden border-2 ${
                         enableAnimations ? 'transition-all duration-1000' : ''
                       } ${
                         isHighlighted 
-                          ? 'bg-gradient-to-r from-red-400 to-red-600 text-white border-red-300 shadow-2xl transform scale-105 z-10' 
+                          ? 'bg-gradient-to-r from-red-400 to-red-600 text-white border-yellow-400 shadow-2xl transform scale-105 z-20' 
                           : 'bg-gradient-to-r text-white hover:scale-102'
                       }`}
                       style={{
-                        minHeight: '80px',
+                        minHeight: '90px',
                         backgroundColor: isHighlighted ? undefined : accentColor,
-                        borderColor: isHighlighted ? undefined : accentColor,
-                        ...(enableAnimations && isHighlighted ? { 
-                          animation: 'pulse 2s infinite, glow 2s infinite' 
+                        borderColor: isHighlighted ? '#FBBF24' : accentColor,
+                        ...(isHighlighted ? { 
+                          boxShadow: '0 0 30px rgba(239, 68, 68, 0.8), 0 0 60px rgba(239, 68, 68, 0.4)',
+                          animation: enableAnimations ? 'pulse 2s infinite' : undefined
                         } : {})
                       }}
                     >
-                      {/* ENHANCED: Multiple highlight effects for called tickets */}
+                      {/* ENHANCED: Multiple highlight effects for called tickets - FIXED: Visible within container */}
                       {isHighlighted && (
                         <>
                           <div className="absolute inset-0 bg-white bg-opacity-20 animate-ping rounded-xl"></div>
-                          <div className="absolute top-2 left-2 bg-yellow-400 text-red-800 px-2 py-1 rounded-full text-xs font-bold animate-bounce z-20">
+                          <div className="absolute top-2 left-2 bg-yellow-400 text-red-800 px-3 py-1 rounded-full text-xs font-bold animate-bounce z-30">
                             ¡LLAMANDO!
                           </div>
-                          <div className="absolute inset-0 border-4 border-yellow-400 rounded-xl animate-pulse"></div>
+                          <div className="absolute inset-0 border-4 border-yellow-400 rounded-xl animate-pulse z-10"></div>
+                          <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-transparent to-yellow-400 opacity-30 animate-pulse rounded-xl"></div>
                         </>
                       )}
                       
                       {/* Left side - Ticket number */}
-                      <div className="flex-shrink-0">
-                        <div className={`${isFullWidth ? 'text-3xl' : 'text-2xl'} font-bold relative z-10 drop-shadow-lg ${
+                      <div className="flex-shrink-0 relative z-20">
+                        <div className={`${isFullWidth ? 'text-3xl' : 'text-2xl'} font-bold drop-shadow-lg ${
                           isHighlighted && enableAnimations ? 'animate-bounce' : ''
                         }`}>
                           #{ticket.number.toString().padStart(3, '0')}
@@ -113,22 +95,22 @@ export default function QueueDisplay({
                       </div>
                       
                       {/* Center - Employee info */}
-                      <div className="flex-1 px-4">
-                        <div className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold mb-1 relative z-10 drop-shadow`}>
+                      <div className="flex-1 px-4 relative z-20">
+                        <div className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold mb-1 drop-shadow`}>
                           {employee?.name || 'N/A'}
                         </div>
-                        <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} opacity-90 text-white relative z-10`}>
+                        <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} opacity-90 text-white`}>
                           {employee?.position}
                         </div>
                       </div>
                       
                       {/* Right side - Service type */}
-                      <div className="flex-shrink-0 text-right">
-                        <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} font-semibold opacity-90 relative z-10`}>
+                      <div className="flex-shrink-0 text-right relative z-20">
+                        <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} font-semibold opacity-90`}>
                           {ticket.serviceType.toUpperCase()}
                         </div>
                         {ticket.servedAt && (
-                          <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} opacity-75 relative z-10`}>
+                          <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} opacity-75`}>
                             {new Date(ticket.servedAt).toLocaleTimeString()}
                           </div>
                         )}
@@ -143,10 +125,10 @@ export default function QueueDisplay({
                 }).map((_, index) => (
                   <div 
                     key={`empty-served-${index}`} 
-                    className={`bg-gray-100 bg-opacity-70 rounded-xl p-3 text-center flex items-center justify-center border-2 border-dashed border-gray-300 ${
+                    className={`bg-gray-100 bg-opacity-70 rounded-xl p-4 text-center flex items-center justify-center border-2 border-dashed border-gray-300 ${
                       enableAnimations ? 'hover:bg-gray-200 transition-colors' : ''
                     }`}
-                    style={{ minHeight: '80px' }}
+                    style={{ minHeight: '90px' }}
                   >
                     <div className="text-center">
                       <div className={`${isFullWidth ? 'text-xl' : 'text-lg'} font-bold mb-1 text-gray-400`}>---</div>
@@ -194,6 +176,11 @@ export default function QueueDisplay({
                       }`}>
                         #{ticket.number.toString().padStart(3, '0')}
                       </div>
+                      {index === 0 && (
+                        <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} text-yellow-800 font-semibold`}>
+                          SIGUIENTE
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -210,18 +197,6 @@ export default function QueueDisplay({
           </div>
         )}
       </div>
-      
-      {/* ENHANCED: Add custom CSS for glow effect */}
-      <style jsx>{`
-        @keyframes glow {
-          0%, 100% {
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
-          }
-          50% {
-            box-shadow: 0 0 40px rgba(239, 68, 68, 0.8), 0 0 60px rgba(239, 68, 68, 0.6);
-          }
-        }
-      `}</style>
     </div>
   );
 }
