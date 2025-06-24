@@ -35,7 +35,7 @@ export const notificationService = {
   },
 
   // Generic notification function
-  showNotification(title: string, message: string, type: 'success' | 'error' | 'info'): void {
+  private showNotification(title: string, message: string, type: 'success' | 'error' | 'info'): void {
     // In a real implementation, this would integrate with a notification system
     // For now, we'll use browser notifications if available
     if ('Notification' in window && Notification.permission === 'granted') {
