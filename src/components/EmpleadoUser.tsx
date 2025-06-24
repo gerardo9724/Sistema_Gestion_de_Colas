@@ -164,7 +164,7 @@ export default function EmpleadoUser() {
       console.log('🔄 Clearing employee currentTicketId - no active ticket');
       employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
-        currentTicketId: undefined
+        currentTicketId: null
       }).catch(error => {
         console.error('Error clearing employee ticket ID:', error);
       });
@@ -278,9 +278,9 @@ export default function EmpleadoUser() {
         servedBy: currentEmployee.id,
         servedAt: now,
         waitTime,
-        // Clear queue fields
-        queuedForEmployee: undefined,
-        queuedAt: undefined,
+        // Clear queue fields - FIXED: Use null instead of undefined
+        queuedForEmployee: null,
+        queuedAt: null,
       });
 
       await employeeService.updateEmployee(currentEmployee.id, {
@@ -321,7 +321,7 @@ export default function EmpleadoUser() {
 
       await employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
-        currentTicketId: undefined,
+        currentTicketId: null, // FIXED: Use null instead of undefined
         totalTicketsServed: currentEmployee.totalTicketsServed + 1,
         isPaused: !callNext && queuedTickets.length === 0 // Don't pause if there are queued tickets or calling next
       });
@@ -401,17 +401,17 @@ export default function EmpleadoUser() {
     }
   };
 
-  // UPDATED: Handle ticket derivation with employee queue support
+  // UPDATED: Handle ticket derivation with employee queue support - FIXED: Use null instead of undefined
   const handleDeriveTicket = async (targetType: 'queue' | 'employee', targetId?: string, newServiceType?: string) => {
     if (!currentEmployee || !currentTicket) return;
 
     try {
       if (targetType === 'queue') {
-        // Return ticket to general queue
+        // Return ticket to general queue - FIXED: Use null instead of undefined
         await ticketService.updateTicket(currentTicket.id, {
           status: 'waiting',
-          servedBy: undefined,
-          servedAt: undefined,
+          servedBy: null,
+          servedAt: null,
           serviceType: newServiceType || currentTicket.serviceType
         });
       } else if (targetType === 'employee' && targetId) {
@@ -426,16 +426,16 @@ export default function EmpleadoUser() {
         if (targetEmployee.currentTicketId) {
           console.log('🔄 Target employee is busy, queuing ticket');
           
-          // Queue the ticket for the target employee
+          // Queue the ticket for the target employee - FIXED: Use null for cleared fields
           await ticketService.updateTicket(currentTicket.id, {
             status: 'queued_for_employee',
             queuedForEmployee: targetId,
             queuedAt: new Date(),
             derivedFrom: currentEmployee.id,
             serviceType: newServiceType || currentTicket.serviceType,
-            // Clear current assignment
-            servedBy: undefined,
-            servedAt: undefined,
+            // Clear current assignment - FIXED: Use null instead of undefined
+            servedBy: null,
+            servedAt: null,
           });
 
           alert(`Ticket derivado y puesto en cola para ${targetEmployee.name}. Será atendido automáticamente cuando termine su ticket actual.`);
@@ -460,10 +460,10 @@ export default function EmpleadoUser() {
         }
       }
 
-      // Update current employee
+      // Update current employee - FIXED: Use null instead of undefined
       await employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
-        currentTicketId: undefined,
+        currentTicketId: null,
         isPaused: queuedTickets.length === 0 // Don't pause if there are queued tickets
       });
 
@@ -516,7 +516,7 @@ export default function EmpleadoUser() {
 
       await employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
-        currentTicketId: undefined,
+        currentTicketId: null, // FIXED: Use null instead of undefined
         totalTicketsCancelled: currentEmployee.totalTicketsCancelled + 1,
         isPaused: queuedTickets.length === 0 // Don't pause if there are queued tickets
       });
