@@ -109,6 +109,7 @@ export default function EmpleadoUser() {
     dispatch({ type: 'LOGOUT' });
   };
 
+  // FIXED: Improved toggle pause function with auto-assignment
   const handleTogglePause = async () => {
     if (!currentEmployee) return;
 
@@ -121,14 +122,56 @@ export default function EmpleadoUser() {
       return;
     }
     
+    setIsLoading(true);
+    
     try {
+      const newPausedState = !currentEmployee.isPaused;
+      
+      console.log('🔄 Toggling pause state:', {
+        employeeId: currentEmployee.id,
+        currentPaused: currentEmployee.isPaused,
+        newPaused: newPausedState
+      });
+
+      // Update employee pause state
       await employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
-        isPaused: !currentEmployee.isPaused
+        isPaused: newPausedState
       });
+
+      // CRITICAL: If resuming (unpausing), try to auto-assign next ticket
+      if (currentEmployee.isPaused && !newPausedState) {
+        console.log('▶️ Employee resuming - attempting auto-assignment...');
+        
+        try {
+          const assignedTicket = await autoAssignNextTicket(currentEmployee.id);
+          
+          if (assignedTicket) {
+            console.log('✅ Auto-assigned ticket:', assignedTicket.number);
+            
+            // Set up timer for the new ticket
+            setServiceStartTime(new Date());
+            setElapsedTime(0);
+            setIsTimerRunning(true);
+            
+            // Show success message
+            setTimeout(() => {
+              alert(`Ticket #${assignedTicket.number.toString().padStart(3, '0')} asignado automáticamente`);
+            }, 500);
+          } else {
+            console.log('ℹ️ No tickets available for auto-assignment');
+          }
+        } catch (autoAssignError) {
+          console.error('❌ Error in auto-assignment:', autoAssignError);
+          // Don't show error to user, just log it
+        }
+      }
+      
     } catch (error) {
-      console.error('Error toggling pause:', error);
+      console.error('❌ Error toggling pause:', error);
       alert('Error al cambiar estado de pausa');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -208,7 +251,12 @@ export default function EmpleadoUser() {
       if (callNext) {
         // Use the auto-assign function from context
         try {
-          await autoAssignNextTicket(currentEmployee.id);
+          const assignedTicket = await autoAssignNextTicket(currentEmployee.id);
+          if (assignedTicket) {
+            setServiceStartTime(new Date());
+            setElapsedTime(0);
+            setIsTimerRunning(true);
+          }
         } catch (error) {
           console.error('Error auto-assigning next ticket:', error);
         }
@@ -392,32 +440,63 @@ export default function EmpleadoUser() {
               <Coffee size={64} className="mx-auto text-orange-400 mb-4" />
               <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
               <p className="text-lg text-gray-600 mb-6">
-                {waitingTickets.length > 0 
+                {queueStats.totalWaitingCount > 0 
                   ? 'Presiona "Reanudar" para comenzar a atender tickets'
                   : 'No hay tickets pendientes. Esperando nuevos tickets...'
                 }
               </p>
-              {waitingTickets.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                  <p className="text-yellow-800 text-sm mb-2">
-                    <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
+              
+              {/* IMPROVED: Better next ticket info */}
+              {queueStats.totalWaitingCount > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center justify-center space-x-2 mb-2">
+                    {queueStats.nextTicketType === 'personal' ? (
+                      <div className="flex items-center space-x-2 text-purple-700">
+                        <ArrowRight size={16} />
+                        <span className="font-semibold">Próximo: Tu cola personal</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2 text-blue-700">
+                        <ArrowRight size={16} />
+                        <span className="font-semibold">Próximo: Cola general</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-yellow-700 text-sm">
+                    {queueStats.personalQueueCount > 0 && (
+                      <span className="font-medium">{queueStats.personalQueueCount} tickets en tu cola personal</span>
+                    )}
+                    {queueStats.personalQueueCount > 0 && queueStats.generalQueueCount > 0 && ' • '}
+                    {queueStats.generalQueueCount > 0 && (
+                      <span>{queueStats.generalQueueCount} tickets en cola general</span>
+                    )}
                   </p>
-                  <p className="text-yellow-700 text-xs">
-                    Al reanudar, automáticamente tomarás este ticket para atención
+                  <p className="text-yellow-600 text-xs mt-2">
+                    Al reanudar, automáticamente tomarás el siguiente ticket disponible
                   </p>
                 </div>
               )}
+              
               <button
                 onClick={handleTogglePause}
-                disabled={waitingTickets.length === 0}
+                disabled={isLoading || queueStats.totalWaitingCount === 0}
                 className={`py-3 px-8 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2 mx-auto ${
-                  waitingTickets.length > 0
+                  queueStats.totalWaitingCount > 0 && !isLoading
                     ? 'bg-green-500 hover:bg-green-600 text-white'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                <Play size={20} />
-                <span>Reanudar</span>
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>Procesando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={20} />
+                    <span>Reanudar</span>
+                  </>
+                )}
               </button>
             </div>
           ) : currentTicket ? (
@@ -435,7 +514,7 @@ export default function EmpleadoUser() {
               <User size={64} className="mx-auto text-gray-300 mb-4" />
               <p className="text-xl text-gray-500">No hay tickets en atención</p>
               <p className="text-gray-400">
-                {waitingTickets.length > 0 
+                {queueStats.totalWaitingCount > 0 
                   ? 'Presiona "Reanudar" para tomar el siguiente ticket'
                   : 'Esperando nuevos tickets...'
                 }
