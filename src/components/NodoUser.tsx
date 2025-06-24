@@ -5,6 +5,8 @@ import QueueDisplay from './nodo/QueueDisplay';
 import CarouselDisplay from './nodo/CarouselDisplay';
 import StatusBar from './nodo/StatusBar';
 import AudioManager from './nodo/AudioManager';
+import { ticketService } from '../services/ticketService';
+import { employeeService } from '../services/employeeService';
 
 export default function NodoUser() {
   const { state, dispatch } = useApp();
@@ -12,7 +14,6 @@ export default function NodoUser() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [highlightedTicket, setHighlightedTicket] = useState<string | null>(null);
   const [lastAnnouncedTicket, setLastAnnouncedTicket] = useState<string | null>(null);
-  const [lastResetDate, setLastResetDate] = useState<string>(''); // NEW: Track last reset date
 
   // CRITICAL: Get node configuration from independent Firebase table
   const nodeConfig = React.useMemo(() => {
@@ -100,50 +101,97 @@ export default function NodoUser() {
     }
   }, [state.nodeConfiguration]);
 
-  // NEW: Daily reset functionality - Check for new day and reset visual state
+  // NEW: Daily reset at 11:59 PM - Complete tickets being served and reset visual state
   useEffect(() => {
-    const checkForNewDay = () => {
-      const today = new Date().toDateString(); // Get current date as string (e.g., "Mon Jan 01 2024")
+    const setupDailyReset = () => {
+      const now = new Date();
+      const resetTime = new Date();
+      resetTime.setHours(23, 59, 0, 0); // Set to 11:59:00 PM today
       
-      // Check if it's a new day
-      if (lastResetDate && lastResetDate !== today) {
-        console.log('🌅 NEW DAY DETECTED - Performing visual reset for nodo module');
-        console.log('Previous date:', lastResetDate);
-        console.log('Current date:', today);
-        
-        // VISUAL RESET: Clear all visual states for new day
-        setHighlightedTicket(null);
-        setLastAnnouncedTicket(null);
-        
-        // Reset carousel to first image
-        setCurrentImageIndex(0);
-        
-        console.log('✅ Visual reset completed for new day');
+      // If it's already past 11:59 PM today, set for tomorrow
+      if (now > resetTime) {
+        resetTime.setDate(resetTime.getDate() + 1);
       }
       
-      // Update the last reset date
-      if (lastResetDate !== today) {
-        setLastResetDate(today);
+      const timeUntilReset = resetTime.getTime() - now.getTime();
+      
+      console.log('🕚 Daily reset scheduled for:', resetTime.toLocaleString());
+      console.log('⏰ Time until reset:', Math.round(timeUntilReset / 1000 / 60), 'minutes');
+      
+      const resetTimeout = setTimeout(async () => {
+        console.log('🌙 EXECUTING DAILY RESET AT 11:59 PM');
         
-        // Store in localStorage to persist across page reloads
-        localStorage.setItem('nodo_last_reset_date', today);
+        try {
+          // 1. Get all tickets currently being served
+          const beingServedTickets = state.tickets.filter(t => t.status === 'being_served');
+          
+          console.log('📋 Tickets being served to complete:', beingServedTickets.length);
+          
+          // 2. Complete all tickets being served with system comment
+          for (const ticket of beingServedTickets) {
+            const now = new Date();
+            const serviceTime = ticket.servedAt 
+              ? Math.floor((now.getTime() - new Date(ticket.servedAt).getTime()) / 1000)
+              : 0;
+            const totalTime = Math.floor((now.getTime() - ticket.createdAt.getTime()) / 1000);
+
+            await ticketService.updateTicket(ticket.id, {
+              status: 'completed',
+              completedAt: now,
+              serviceTime,
+              totalTime,
+              cancellationComment: 'Finalizado por el sistema' // System completion comment
+            });
+
+            console.log(`✅ Ticket #${ticket.number} completed by system`);
+
+            // 3. Update employee status - clear current ticket and set to paused
+            if (ticket.servedBy) {
+              const employee = state.employees.find(e => e.id === ticket.servedBy);
+              if (employee) {
+                await employeeService.updateEmployee(employee.id, {
+                  ...employee,
+                  currentTicketId: undefined,
+                  totalTicketsServed: employee.totalTicketsServed + 1,
+                  isPaused: true // Set employee to paused state
+                });
+                
+                console.log(`👤 Employee ${employee.name} set to paused state`);
+              }
+            }
+          }
+          
+          // 4. Reset visual states for new day
+          setHighlightedTicket(null);
+          setLastAnnouncedTicket(null);
+          setCurrentImageIndex(0); // Reset carousel to first image
+          
+          console.log('🔄 Visual states reset for new day');
+          console.log('✅ DAILY RESET COMPLETED SUCCESSFULLY');
+          
+        } catch (error) {
+          console.error('❌ Error during daily reset:', error);
+        }
+        
+        // 5. Schedule next reset for tomorrow at 11:59 PM
+        setupDailyReset();
+        
+      }, timeUntilReset);
+      
+      // Store timeout ID for cleanup
+      return resetTimeout;
+    };
+    
+    const timeoutId = setupDailyReset();
+    
+    // Cleanup timeout on component unmount
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        console.log('🧹 Daily reset timeout cleared');
       }
     };
-
-    // Initialize from localStorage on component mount
-    const storedResetDate = localStorage.getItem('nodo_last_reset_date');
-    if (storedResetDate) {
-      setLastResetDate(storedResetDate);
-    }
-
-    // Check immediately
-    checkForNewDay();
-
-    // Set up interval to check every minute for new day
-    const resetCheckInterval = setInterval(checkForNewDay, 60000); // Check every minute
-
-    return () => clearInterval(resetCheckInterval);
-  }, [lastResetDate]);
+  }, []); // Empty dependency array - only run once on mount
 
   // Update time every second
   useEffect(() => {
@@ -370,13 +418,6 @@ export default function NodoUser() {
         speechRate={nodeConfig.speechRate}
         highlightDuration={nodeConfig.highlightDuration}
       />
-
-      {/* NEW: Daily Reset Indicator (only visible in development/debug mode) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed top-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs font-mono z-50">
-          Reset: {lastResetDate || 'Initializing...'}
-        </div>
-      )}
     </div>
   );
 }
