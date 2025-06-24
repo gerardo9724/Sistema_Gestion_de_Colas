@@ -46,6 +46,10 @@ const convertFirestoreTicket = (doc: any): Ticket => {
     totalTime: data.totalTime || undefined,
     cancellationReason: data.cancellationReason || undefined,
     cancellationComment: data.cancellationComment || undefined,
+    // NEW: Employee queue fields
+    queuedForEmployee: data.queuedForEmployee || undefined,
+    queuedAt: data.queuedAt ? timestampToDate(data.queuedAt) : undefined,
+    derivedFrom: data.derivedFrom || undefined,
   };
 };
 
@@ -110,6 +114,10 @@ export const ticketService = {
         totalTime: null,
         cancellationReason: null,
         cancellationComment: null,
+        // NEW: Employee queue fields
+        queuedForEmployee: null,
+        queuedAt: null,
+        derivedFrom: null,
       };
       
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
@@ -126,6 +134,67 @@ export const ticketService = {
     } catch (error) {
       console.error('Error creating ticket:', error);
       throw new Error('Failed to create ticket');
+    }
+  },
+
+  // NEW: Queue ticket for specific employee
+  async queueTicketForEmployee(ticketId: string, employeeId: string, derivedFromEmployeeId?: string): Promise<void> {
+    try {
+      const updateData: any = {
+        status: 'queued_for_employee',
+        queuedForEmployee: employeeId,
+        queuedAt: Timestamp.fromDate(new Date()),
+      };
+
+      if (derivedFromEmployeeId) {
+        updateData.derivedFrom = derivedFromEmployeeId;
+      }
+
+      await updateDoc(doc(db, 'tickets', ticketId), updateData);
+    } catch (error) {
+      console.error('Error queuing ticket for employee:', error);
+      throw new Error('Failed to queue ticket for employee');
+    }
+  },
+
+  // NEW: Get next queued ticket for employee
+  async getNextQueuedTicketForEmployee(employeeId: string): Promise<Ticket | null> {
+    try {
+      const q = query(
+        collection(db, 'tickets'),
+        where('status', '==', 'queued_for_employee'),
+        where('queuedForEmployee', '==', employeeId),
+        orderBy('queuedAt', 'asc'),
+        limit(1)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        return null;
+      }
+      
+      return convertFirestoreTicket(querySnapshot.docs[0]);
+    } catch (error) {
+      console.error('Error getting next queued ticket:', error);
+      return null;
+    }
+  },
+
+  // NEW: Get queued tickets count for employee
+  async getQueuedTicketsCountForEmployee(employeeId: string): Promise<number> {
+    try {
+      const q = query(
+        collection(db, 'tickets'),
+        where('status', '==', 'queued_for_employee'),
+        where('queuedForEmployee', '==', employeeId)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.size;
+    } catch (error) {
+      console.error('Error getting queued tickets count:', error);
+      return 0;
     }
   },
 
@@ -181,6 +250,7 @@ export const ticketService = {
       if (updateData.servedAt) updateData.servedAt = Timestamp.fromDate(updateData.servedAt);
       if (updateData.completedAt) updateData.completedAt = Timestamp.fromDate(updateData.completedAt);
       if (updateData.cancelledAt) updateData.cancelledAt = Timestamp.fromDate(updateData.cancelledAt);
+      if (updateData.queuedAt) updateData.queuedAt = Timestamp.fromDate(updateData.queuedAt);
       
       await updateDoc(ticketRef, updateData);
     } catch (error) {

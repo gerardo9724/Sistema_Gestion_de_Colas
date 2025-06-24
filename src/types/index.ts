@@ -4,7 +4,7 @@ export interface Ticket {
   number: number;
   serviceType: string;
   serviceSubtype?: string;
-  status: 'waiting' | 'being_served' | 'completed' | 'cancelled';
+  status: 'waiting' | 'being_served' | 'completed' | 'cancelled' | 'queued_for_employee'; // NEW: Added queued status
   queuePosition: number;
   createdAt: Date;
   servedAt?: Date;
@@ -17,6 +17,10 @@ export interface Ticket {
   totalTime?: number;
   cancellationReason?: string;
   cancellationComment?: string;
+  // NEW: Employee queue fields
+  queuedForEmployee?: string; // Employee ID for queued tickets
+  queuedAt?: Date; // When ticket was queued for employee
+  derivedFrom?: string; // Original employee who derived the ticket
 }
 
 export interface ServiceCategory {
@@ -55,6 +59,8 @@ export interface Employee {
   isPaused: boolean;
   userId?: string;
   createdAt: Date;
+  // NEW: Employee queue fields
+  queuedTicketsCount?: number; // Number of tickets queued for this employee
 }
 
 export interface User {

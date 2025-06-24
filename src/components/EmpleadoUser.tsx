@@ -14,7 +14,8 @@ import {
   Timer,
   Key,
   Volume2,
-  ArrowRight
+  ArrowRight,
+  List
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { authService } from '../services/authService';
@@ -60,6 +61,17 @@ export default function EmpleadoUser() {
   const currentTicket = state.tickets.find(ticket => 
     ticket.status === 'being_served' && ticket.servedBy === currentEmployee?.id
   );
+
+  // NEW: Get queued tickets for this employee
+  const queuedTickets = state.tickets
+    .filter(ticket => 
+      ticket.status === 'queued_for_employee' && ticket.queuedForEmployee === currentEmployee?.id
+    )
+    .sort((a, b) => {
+      const aTime = a.queuedAt ? new Date(a.queuedAt).getTime() : 0;
+      const bTime = b.queuedAt ? new Date(b.queuedAt).getTime() : 0;
+      return aTime - bTime; // Oldest queued first
+    });
 
   // FIXED: Complete state restoration when employee has active ticket - PREVENT TIMER RESET ON RECALLS
   useEffect(() => {
@@ -249,6 +261,47 @@ export default function EmpleadoUser() {
     }
   };
 
+  // NEW: Handle starting next queued ticket automatically
+  const handleStartNextQueuedTicket = async () => {
+    if (!currentEmployee || queuedTickets.length === 0) return;
+
+    const nextQueuedTicket = queuedTickets[0];
+    
+    try {
+      const now = new Date();
+      const waitTime = nextQueuedTicket.queuedAt 
+        ? Math.floor((now.getTime() - new Date(nextQueuedTicket.queuedAt).getTime()) / 1000)
+        : 0;
+      
+      await ticketService.updateTicket(nextQueuedTicket.id, {
+        status: 'being_served',
+        servedBy: currentEmployee.id,
+        servedAt: now,
+        waitTime,
+        // Clear queue fields
+        queuedForEmployee: undefined,
+        queuedAt: undefined,
+      });
+
+      await employeeService.updateEmployee(currentEmployee.id, {
+        ...currentEmployee,
+        currentTicketId: nextQueuedTicket.id,
+        isPaused: false
+      });
+
+      // CRITICAL: Set timer for the new ticket
+      console.log('🆕 Starting QUEUED ticket service - Setting original timer:', now);
+      setCurrentTicketId(nextQueuedTicket.id);
+      setOriginalServiceStartTime(now);
+      setServiceStartTime(now);
+      setElapsedTime(0);
+      setIsTimerRunning(true);
+    } catch (error) {
+      console.error('Error starting queued ticket:', error);
+      alert('Error al iniciar la atención del ticket en cola');
+    }
+  };
+
   const handleCompleteTicket = async (ticketId: string, callNext: boolean = false) => {
     if (!currentEmployee || !originalServiceStartTime) return; // Use originalServiceStartTime
 
@@ -270,7 +323,7 @@ export default function EmpleadoUser() {
         ...currentEmployee,
         currentTicketId: undefined,
         totalTicketsServed: currentEmployee.totalTicketsServed + 1,
-        isPaused: !callNext
+        isPaused: !callNext && queuedTickets.length === 0 // Don't pause if there are queued tickets or calling next
       });
       
       // CRITICAL: Reset all timer state
@@ -281,7 +334,11 @@ export default function EmpleadoUser() {
       setElapsedTime(0);
       setIsTimerRunning(false);
 
-      if (callNext) {
+      // NEW: Check for queued tickets first, then waiting tickets
+      if (queuedTickets.length > 0) {
+        console.log('🔄 Auto-starting next queued ticket');
+        setTimeout(() => handleStartNextQueuedTicket(), 500);
+      } else if (callNext) {
         const waitingTickets = state.tickets
           .filter(t => t.status === 'waiting')
           .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -344,7 +401,7 @@ export default function EmpleadoUser() {
     }
   };
 
-  // UPDATED: Handle ticket derivation - NO POP-UP CONFIRMATION
+  // UPDATED: Handle ticket derivation with employee queue support
   const handleDeriveTicket = async (targetType: 'queue' | 'employee', targetId?: string, newServiceType?: string) => {
     if (!currentEmployee || !currentTicket) return;
 
@@ -358,36 +415,56 @@ export default function EmpleadoUser() {
           serviceType: newServiceType || currentTicket.serviceType
         });
       } else if (targetType === 'employee' && targetId) {
-        // Assign to specific employee
+        // NEW: Enhanced employee assignment with queue support
         const targetEmployee = state.employees.find(e => e.id === targetId);
         if (!targetEmployee) {
           alert('Empleado destino no encontrado');
           return;
         }
 
+        // NEW: Check if target employee is busy - if so, queue the ticket
         if (targetEmployee.currentTicketId) {
-          alert('El empleado destino ya tiene un ticket asignado');
-          return;
+          console.log('🔄 Target employee is busy, queuing ticket');
+          
+          // Queue the ticket for the target employee
+          await ticketService.updateTicket(currentTicket.id, {
+            status: 'queued_for_employee',
+            queuedForEmployee: targetId,
+            queuedAt: new Date(),
+            derivedFrom: currentEmployee.id,
+            serviceType: newServiceType || currentTicket.serviceType,
+            // Clear current assignment
+            servedBy: undefined,
+            servedAt: undefined,
+          });
+
+          alert(`Ticket derivado y puesto en cola para ${targetEmployee.name}. Será atendido automáticamente cuando termine su ticket actual.`);
+        } else {
+          // Target employee is available, assign immediately
+          console.log('✅ Target employee is available, assigning immediately');
+          
+          await ticketService.updateTicket(currentTicket.id, {
+            status: 'being_served',
+            servedBy: targetId,
+            servedAt: new Date(),
+            serviceType: newServiceType || currentTicket.serviceType
+          });
+
+          await employeeService.updateEmployee(targetId, {
+            ...targetEmployee,
+            currentTicketId: currentTicket.id,
+            isPaused: false
+          });
+
+          alert(`Ticket derivado exitosamente a ${targetEmployee.name}`);
         }
-
-        await ticketService.updateTicket(currentTicket.id, {
-          servedBy: targetId,
-          servedAt: new Date(),
-          serviceType: newServiceType || currentTicket.serviceType
-        });
-
-        await employeeService.updateEmployee(targetId, {
-          ...targetEmployee,
-          currentTicketId: currentTicket.id,
-          isPaused: false
-        });
       }
 
       // Update current employee
       await employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
         currentTicketId: undefined,
-        isPaused: true
+        isPaused: queuedTickets.length === 0 // Don't pause if there are queued tickets
       });
 
       // CRITICAL: Reset all timer state
@@ -399,7 +476,12 @@ export default function EmpleadoUser() {
       setIsTimerRunning(false);
       setShowDeriveModal(false);
 
-      // REMOVED: No pop-up confirmation - ticket derivation completes silently
+      // NEW: Auto-start next queued ticket if available
+      if (queuedTickets.length > 0) {
+        console.log('🔄 Auto-starting next queued ticket after derivation');
+        setTimeout(() => handleStartNextQueuedTicket(), 500);
+      }
+
       console.log('✅ Ticket derivado exitosamente - sin pop-up de confirmación');
     } catch (error) {
       console.error('Error deriving ticket:', error);
@@ -436,7 +518,7 @@ export default function EmpleadoUser() {
         ...currentEmployee,
         currentTicketId: undefined,
         totalTicketsCancelled: currentEmployee.totalTicketsCancelled + 1,
-        isPaused: true
+        isPaused: queuedTickets.length === 0 // Don't pause if there are queued tickets
       });
 
       // CRITICAL: Reset all timer state
@@ -450,6 +532,12 @@ export default function EmpleadoUser() {
       setCancellationReason('');
       setCancellationComment('');
       setError('');
+
+      // NEW: Auto-start next queued ticket if available
+      if (queuedTickets.length > 0) {
+        console.log('🔄 Auto-starting next queued ticket after cancellation');
+        setTimeout(() => handleStartNextQueuedTicket(), 500);
+      }
     } catch (error) {
       console.error('Error cancelling ticket:', error);
       alert('Error al cancelar el ticket');
@@ -516,26 +604,54 @@ export default function EmpleadoUser() {
             <Coffee size={64} className="mx-auto text-orange-400 mb-4" />
             <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
             <p className="text-lg text-gray-600 mb-6">
-              {waitingTickets.length > 0 
-                ? 'Presiona "Reanudar" para comenzar a atender tickets'
-                : 'No hay tickets pendientes. Esperando nuevos tickets...'
+              {queuedTickets.length > 0 
+                ? `Tienes ${queuedTickets.length} ticket(s) en cola personal. Presiona "Reanudar" para atenderlos.`
+                : waitingTickets.length > 0 
+                  ? 'Presiona "Reanudar" para comenzar a atender tickets'
+                  : 'No hay tickets pendientes. Esperando nuevos tickets...'
               }
             </p>
-            {waitingTickets.length > 0 && (
+            
+            {/* NEW: Show queued tickets info */}
+            {queuedTickets.length > 0 && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-purple-800 mb-2">📋 Tickets en tu Cola Personal:</h4>
+                {queuedTickets.slice(0, 3).map((ticket, index) => (
+                  <div key={ticket.id} className="text-sm text-purple-700 mb-1">
+                    #{ticket.number.toString().padStart(3, '0')} - {ticket.serviceType.toUpperCase()}
+                    {ticket.derivedFrom && (
+                      <span className="text-purple-600"> (Derivado)</span>
+                    )}
+                  </div>
+                ))}
+                {queuedTickets.length > 3 && (
+                  <div className="text-sm text-purple-600">
+                    ... y {queuedTickets.length - 3} más
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {(waitingTickets.length > 0 || queuedTickets.length > 0) && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                 <p className="text-yellow-800 text-sm mb-2">
-                  <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
+                  <strong>Próximo ticket:</strong> 
+                  {queuedTickets.length > 0 
+                    ? ` #${queuedTickets[0].number.toString().padStart(3, '0'))} (Tu cola personal)`
+                    : ` #${waitingTickets[0].number.toString().padStart(3, '0'))} (Cola general)`
+                  }
                 </p>
                 <p className="text-yellow-700 text-xs">
                   Al reanudar, automáticamente tomarás este ticket para atención
                 </p>
               </div>
             )}
+            
             <button
               onClick={handleTogglePause}
-              disabled={waitingTickets.length === 0}
+              disabled={waitingTickets.length === 0 && queuedTickets.length === 0}
               className={`py-3 px-8 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2 mx-auto ${
-                waitingTickets.length > 0
+                (waitingTickets.length > 0 || queuedTickets.length > 0)
                   ? 'bg-green-500 hover:bg-green-600 text-white'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
@@ -561,6 +677,12 @@ export default function EmpleadoUser() {
                   {currentTicket.waitTime && (
                     <div className="text-sm text-gray-500">
                       Tiempo de espera: {formatTime(currentTicket.waitTime)}
+                    </div>
+                  )}
+                  {/* NEW: Show if ticket was derived */}
+                  {currentTicket.derivedFrom && (
+                    <div className="text-sm text-purple-600 font-medium">
+                      📤 Ticket derivado de otro empleado
                     </div>
                   )}
                 </div>
@@ -631,7 +753,6 @@ export default function EmpleadoUser() {
                   <span>Finalizar y Siguiente</span>
                 </button>
                 
-                {/* NEW: Derive Button */}
                 <button
                   onClick={() => setShowDeriveModal(true)}
                   className="bg-purple-500 hover:bg-purple-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
@@ -655,79 +776,152 @@ export default function EmpleadoUser() {
             <User size={64} className="mx-auto text-gray-300 mb-4" />
             <p className="text-xl text-gray-500">No hay tickets en atención</p>
             <p className="text-gray-400">
-              {waitingTickets.length > 0 
-                ? 'Presiona "Reanudar" para tomar el siguiente ticket'
-                : 'Esperando nuevos tickets...'
+              {queuedTickets.length > 0 
+                ? `Tienes ${queuedTickets.length} ticket(s) en cola personal. Presiona "Reanudar" para atenderlos.`
+                : waitingTickets.length > 0 
+                  ? 'Presiona "Reanudar" para tomar el siguiente ticket'
+                  : 'Esperando nuevos tickets...'
               }
             </p>
           </div>
         )}
       </div>
 
-      {/* Waiting Queue */}
+      {/* Waiting Queue + Personal Queue */}
       <div className="bg-white rounded-2xl shadow-xl p-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          Cola de Espera ({waitingTickets.length})
+          Colas de Tickets
         </h2>
         
-        <div className="space-y-4 max-h-96 overflow-y-auto">
-          {waitingTickets.map((ticket, index) => {
-            const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
-            
-            return (
-              <div
-                key={ticket.id}
-                className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                  index === 0 
-                    ? 'border-yellow-400 bg-yellow-50' 
-                    : 'border-gray-200 bg-gray-50'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="flex items-center space-x-3">
-                      <div className="text-2xl font-bold text-gray-800">
-                        #{ticket.number.toString().padStart(3, '0')}
-                      </div>
-                      {index === 0 && (
-                        <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full">
-                          SIGUIENTE
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-lg font-semibold text-gray-600">
-                      {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {ticket.createdAt.toLocaleTimeString()}
-                    </div>
-                    <div className="text-sm text-orange-600 font-medium">
-                      Esperando: {formatTime(waitTime)}
-                    </div>
-                  </div>
+        <div className="space-y-6">
+          {/* NEW: Personal Queue Section */}
+          {queuedTickets.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center space-x-2">
+                <List size={20} />
+                <span>Tu Cola Personal ({queuedTickets.length})</span>
+              </h3>
+              
+              <div className="space-y-3 max-h-48 overflow-y-auto">
+                {queuedTickets.map((ticket, index) => {
+                  const queueTime = ticket.queuedAt 
+                    ? Math.floor((new Date().getTime() - new Date(ticket.queuedAt).getTime()) / 1000)
+                    : 0;
                   
-                  <button
-                    onClick={() => handleStartService(ticket.id)}
-                    disabled={currentTicket !== undefined || index !== 0 || isPaused}
-                    className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
-                      index === 0 && !currentTicket && !isPaused
-                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    {index === 0 && isPaused ? 'Reanudar primero' : index === 0 ? 'Atender' : 'Esperar turno'}
-                  </button>
-                </div>
+                  return (
+                    <div
+                      key={ticket.id}
+                      className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+                        index === 0 
+                          ? 'border-purple-400 bg-purple-50' 
+                          : 'border-purple-200 bg-purple-25'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <div className="text-lg font-bold text-purple-800">
+                              #{ticket.number.toString().padStart(3, '0')}
+                            </div>
+                            {index === 0 && (
+                              <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2 py-1 rounded-full">
+                                SIGUIENTE
+                              </span>
+                            )}
+                            {ticket.derivedFrom && (
+                              <span className="bg-orange-100 text-orange-800 text-xs font-semibold px-2 py-1 rounded-full">
+                                DERIVADO
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm font-semibold text-purple-600">
+                            {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
+                          </div>
+                          <div className="text-xs text-purple-500">
+                            En cola: {formatTime(queueTime)}
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-purple-600">
+                          Pos. {index + 1}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-          
-          {waitingTickets.length === 0 && (
-            <div className="text-center py-12">
-              <Clock size={64} className="mx-auto text-gray-300 mb-4" />
-              <p className="text-xl text-gray-500">No hay tickets en espera</p>
             </div>
           )}
+
+          {/* General Queue Section */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center space-x-2">
+              <Clock size={20} />
+              <span>Cola General ({waitingTickets.length})</span>
+            </h3>
+            
+            <div className="space-y-3 max-h-48 overflow-y-auto">
+              {waitingTickets.slice(0, 5).map((ticket, index) => {
+                const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
+                
+                return (
+                  <div
+                    key={ticket.id}
+                    className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+                      index === 0 
+                        ? 'border-yellow-400 bg-yellow-50' 
+                        : 'border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <div className="text-lg font-bold text-gray-800">
+                            #{ticket.number.toString().padStart(3, '0')}
+                          </div>
+                          {index === 0 && (
+                            <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full">
+                              SIGUIENTE
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm font-semibold text-gray-600">
+                          {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {ticket.createdAt.toLocaleTimeString()}
+                        </div>
+                        <div className="text-xs text-orange-600 font-medium">
+                          Esperando: {formatTime(waitTime)}
+                        </div>
+                      </div>
+                      
+                      <button
+                        onClick={() => handleStartService(ticket.id)}
+                        disabled={currentTicket !== undefined || index !== 0 || isPaused || queuedTickets.length > 0}
+                        className={`py-2 px-3 rounded-lg font-semibold transition-colors text-sm ${
+                          index === 0 && !currentTicket && !isPaused && queuedTickets.length === 0
+                            ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {queuedTickets.length > 0 ? 'Cola personal primero' :
+                         index === 0 && isPaused ? 'Reanudar primero' : 
+                         index === 0 ? 'Atender' : 'Esperar turno'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {waitingTickets.length === 0 && (
+                <div className="text-center py-8">
+                  <Clock size={48} className="mx-auto text-gray-300 mb-2" />
+                  <p className="text-gray-500">No hay tickets en cola general</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -815,6 +1009,24 @@ export default function EmpleadoUser() {
                       )}
                     </div>
                   </div>
+                  {/* NEW: Queued Tickets Status */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">Cola Personal</label>
+                    <div className="p-3 bg-white border border-blue-300 rounded-lg">
+                      {queuedTickets.length > 0 ? (
+                        <div>
+                          <span className="text-blue-800 font-semibold">
+                            {queuedTickets.length} ticket(s) en cola
+                          </span>
+                          <div className="text-xs text-blue-600 mt-1">
+                            Próximo: #{queuedTickets[0].number.toString().padStart(3, '0'))} - {queuedTickets[0].serviceType.toUpperCase()}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">Sin tickets en cola personal</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -866,6 +1078,8 @@ export default function EmpleadoUser() {
                 <li>• <strong>El estado del empleado se mantiene al cerrar y abrir el sistema</strong></li>
                 <li>• <strong>Si tienes un ticket en atención, se restaurará automáticamente</strong></li>
                 <li>• <strong>⏰ El cronómetro NO se reinicia al usar "Volver a llamar"</strong></li>
+                <li>• <strong>🔄 Los tickets derivados a ti se ponen en cola automáticamente</strong></li>
+                <li>• <strong>📋 Tu cola personal tiene prioridad sobre la cola general</strong></li>
               </ul>
             </div>
           </div>
@@ -920,6 +1134,17 @@ export default function EmpleadoUser() {
                   </div>
                   <div className="text-green-600 text-xs">
                     {originalServiceStartTime ? formatTime(elapsedTime) : 'Iniciando...'}
+                  </div>
+                </div>
+              )}
+              {/* NEW: Queued Tickets Indicator in Header */}
+              {queuedTickets.length > 0 && (
+                <div className="bg-purple-100 border border-purple-300 rounded-lg px-3 py-2">
+                  <div className="text-purple-800 font-semibold text-sm">
+                    Cola Personal: {queuedTickets.length}
+                  </div>
+                  <div className="text-purple-600 text-xs">
+                    Próximo: #{queuedTickets[0].number.toString().padStart(3, '0')}
                   </div>
                 </div>
               )}
@@ -994,6 +1219,12 @@ export default function EmpleadoUser() {
                     >
                       <IconComponent size={20} />
                       <span className="font-medium">{tab.name}</span>
+                      {/* NEW: Show queue count badge */}
+                      {tab.id === 'queue' && queuedTickets.length > 0 && (
+                        <span className="bg-purple-500 text-white text-xs font-bold px-2 py-1 rounded-full ml-auto">
+                          {queuedTickets.length}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -1156,7 +1387,7 @@ export default function EmpleadoUser() {
         </div>
       )}
 
-      {/* NEW: Derive Ticket Modal */}
+      {/* NEW: Enhanced Derive Ticket Modal */}
       {showDeriveModal && currentTicket && (
         <DeriveTicketModal
           ticket={currentTicket}
