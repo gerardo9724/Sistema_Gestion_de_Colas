@@ -39,33 +39,12 @@ export default function QueueDisplay({
     return Math.floor((new Date().getTime() - new Date(ticket.servedAt).getTime()) / 1000);
   };
 
-  // FIXED: Calculate grid columns based on maxTicketsDisplayed configuration
-  const getGridColumns = () => {
-    const totalSlots = maxTicketsDisplayed;
-    
-    if (isFullWidth) {
-      // Full width mode - more columns available
-      if (totalSlots <= 2) return 'grid-cols-2';
-      if (totalSlots <= 4) return 'grid-cols-2';
-      if (totalSlots <= 6) return 'grid-cols-3';
-      if (totalSlots <= 8) return 'grid-cols-4';
-      if (totalSlots <= 12) return 'grid-cols-4';
-      return 'grid-cols-4';
-    } else {
-      // Half width mode - fewer columns
-      if (totalSlots <= 2) return 'grid-cols-1';
-      if (totalSlots <= 4) return 'grid-cols-2';
-      if (totalSlots <= 6) return 'grid-cols-2';
-      return 'grid-cols-3';
-    }
-  };
-
-  // FIXED: Create slots array based on configuration limit
-  const createTicketSlots = () => {
+  // FIXED: Create vertical slots for all tickets being served (no grid, just vertical list)
+  const createVerticalTicketSlots = () => {
     const slots = [];
     const totalSlots = maxTicketsDisplayed;
     
-    // Fill with actual tickets first
+    // Fill with actual tickets first (already sorted by order of attention)
     for (let i = 0; i < Math.min(beingServedTickets.length, totalSlots); i++) {
       slots.push({ type: 'ticket', ticket: beingServedTickets[i], index: i });
     }
@@ -78,7 +57,7 @@ export default function QueueDisplay({
     return slots;
   };
 
-  const ticketSlots = createTicketSlots();
+  const ticketSlots = createVerticalTicketSlots();
 
   return (
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col overflow-hidden">
@@ -88,7 +67,7 @@ export default function QueueDisplay({
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {/* Currently Being Served - FIXED: Grid layout based on configuration */}
+        {/* Currently Being Served - FIXED: Vertical layout only */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
@@ -97,27 +76,25 @@ export default function QueueDisplay({
             </h3>
           </div>
           
-          {/* FIXED: Display tickets in configured grid layout */}
-          <div className="flex-1 flex flex-col justify-start overflow-hidden">
-            <div className={`grid ${getGridColumns()} gap-3 h-full`}>
+          {/* FIXED: Vertical distribution only - single column layout */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="space-y-3">
               {ticketSlots.map((slot) => {
                 if (slot.type === 'empty') {
                   return (
                     <div 
                       key={`empty-${slot.index}`}
-                      className={`rounded-xl p-3 text-center shadow-lg flex flex-col justify-between border-2 border-dashed border-gray-300 bg-gray-50 ${
+                      className={`rounded-xl p-4 text-center shadow-lg flex items-center justify-between border-2 border-dashed border-gray-300 bg-gray-50 ${
                         enableAnimations ? 'transition-all duration-300 hover:bg-gray-100' : ''
                       }`}
                       style={{
-                        minHeight: isFullWidth ? '120px' : '100px',
+                        minHeight: '80px',
                       }}
                     >
-                      <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                        <div className={`${isFullWidth ? 'text-2xl' : 'text-xl'} font-bold mb-2 opacity-50`}>
-                          ---
-                        </div>
-                        <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} font-medium`}>
-                          Disponible
+                      <div className="flex-1 flex items-center justify-center text-gray-400">
+                        <div className="text-center">
+                          <div className="text-xl font-bold mb-1 opacity-50">---</div>
+                          <div className="text-sm font-medium">Disponible</div>
                         </div>
                       </div>
                     </div>
@@ -132,11 +109,11 @@ export default function QueueDisplay({
                 return (
                   <div 
                     key={ticket.id} 
-                    className={`rounded-xl p-3 text-center shadow-lg flex flex-col justify-between relative border-2 overflow-hidden ${
+                    className={`rounded-xl p-4 shadow-lg flex items-center justify-between relative border-2 overflow-hidden ${
                       enableAnimations ? 'transition-all duration-500' : ''
                     }`}
                     style={{
-                      minHeight: isFullWidth ? '120px' : '100px',
+                      minHeight: '80px',
                       backgroundColor: accentColor,
                       borderColor: accentColor,
                       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
@@ -149,52 +126,55 @@ export default function QueueDisplay({
                         <div className="absolute inset-2 bg-white bg-opacity-20 rounded-lg animate-pulse"></div>
                         
                         {/* Calling badge - POSITIONED INSIDE */}
-                        <div className="absolute top-1 left-1 bg-yellow-400 text-red-800 px-2 py-1 rounded-full text-xs font-bold animate-bounce z-30">
+                        <div className="absolute top-2 left-2 bg-yellow-400 text-red-800 px-2 py-1 rounded-full text-xs font-bold animate-bounce z-30">
                           ¡LLAMANDO!
                         </div>
                       </>
                     )}
                     
-                    {/* FIXED: Ticket content with internal scaling animation */}
-                    <div className={`relative z-20 flex flex-col h-full justify-between text-white ${
+                    {/* FIXED: Ticket content with internal scaling animation - HORIZONTAL LAYOUT */}
+                    <div className={`relative z-20 flex items-center justify-between w-full text-white ${
                       isHighlighted && enableAnimations ? 'animate-pulse' : ''
                     }`}>
-                      {/* Ticket number - TOP */}
-                      <div className={`${isFullWidth ? 'text-2xl' : 'text-xl'} font-bold drop-shadow-lg ${
+                      {/* Left side - Ticket number and service */}
+                      <div className={`flex items-center space-x-4 ${
                         isHighlighted && enableAnimations ? 'transform scale-110 transition-transform duration-1000' : ''
                       }`}>
-                        #{ticket.number.toString().padStart(3, '0')}
+                        <div className="text-3xl font-bold drop-shadow-lg">
+                          #{ticket.number.toString().padStart(3, '0')}
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="text-lg font-bold drop-shadow">
+                            {ticket.serviceType.toUpperCase()}
+                          </div>
+                          <div className="text-sm opacity-90">
+                            {new Date(ticket.servedAt || ticket.createdAt).toLocaleTimeString()}
+                          </div>
+                        </div>
                       </div>
                       
-                      {/* Employee info - MIDDLE */}
-                      <div className={`flex-1 flex flex-col justify-center ${
+                      {/* Center - Employee info */}
+                      <div className={`flex flex-col items-center text-center ${
                         isHighlighted && enableAnimations ? 'transform scale-105 transition-transform duration-1000' : ''
                       }`}>
-                        <div className={`${isFullWidth ? 'text-base' : 'text-sm'} font-bold mb-1 drop-shadow`}>
+                        <div className="text-base font-bold mb-1 drop-shadow">
                           {employee?.name || 'N/A'}
                         </div>
-                        <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} opacity-90`}>
+                        <div className="text-xs opacity-90">
                           {employee?.position}
                         </div>
                       </div>
                       
-                      {/* Service info - BOTTOM */}
-                      <div className={`${
+                      {/* Right side - Service time */}
+                      <div className={`flex flex-col items-end text-right ${
                         isHighlighted && enableAnimations ? 'transform scale-105 transition-transform duration-1000' : ''
                       }`}>
-                        <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} font-semibold opacity-90 mb-1`}>
-                          {ticket.serviceType.toUpperCase()}
-                        </div>
-                        {/* Service time */}
-                        <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} opacity-75 font-mono font-bold`}>
+                        <div className="text-lg font-bold font-mono drop-shadow">
                           {formatTime(serviceTime)}
                         </div>
-                        {/* Call time */}
-                        {ticket.servedAt && (
-                          <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} opacity-60`}>
-                            {new Date(ticket.servedAt).toLocaleTimeString()}
-                          </div>
-                        )}
+                        <div className="text-xs opacity-75">
+                          Tiempo de servicio
+                        </div>
                       </div>
                     </div>
                   </div>
