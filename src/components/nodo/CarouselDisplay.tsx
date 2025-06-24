@@ -31,15 +31,15 @@ export default function CarouselDisplay({
       return <span>{carouselTitle}</span>;
     }
 
-    // IMPROVED: Calculate animation duration for complete text hiding
-    const baseSpeed = 12; // Further reduced for smoother animation
+    // PERFECTED: Calculate animation duration for complete text scrolling
+    const baseSpeed = 10; // Optimized for smooth complete scrolling
     const speedMultiplier = (11 - scrollingSpeed) / 10; // Convert 1-10 scale to 0.1-1.0
     const textLength = carouselTitle.length;
-    const lengthFactor = Math.max(1, textLength / 12); // Better adjustment for text length
+    const lengthFactor = Math.max(1, textLength / 10); // Adjusted for complete scrolling
     const animationDuration = baseSpeed * speedMultiplier * lengthFactor;
     
     // Generate unique animation name to avoid conflicts
-    const animationName = `scroll-text-${Math.random().toString(36).substr(2, 9)}`;
+    const animationName = `scroll-complete-${Math.random().toString(36).substr(2, 9)}`;
 
     return (
       <div className="overflow-hidden whitespace-nowrap relative w-full">
@@ -56,11 +56,11 @@ export default function CarouselDisplay({
             0% {
               transform: translateX(100%);
             }
-            70% {
-              transform: translateX(-120%);
+            75% {
+              transform: translateX(-100%);
             }
             100% {
-              transform: translateX(-120%);
+              transform: translateX(-100%);
             }
           }
         `}</style>
