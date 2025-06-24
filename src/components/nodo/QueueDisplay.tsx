@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Timer, Clock, CheckCircle } from 'lucide-react';
+import { Users, Timer, Clock } from 'lucide-react';
 import type { Ticket, Employee } from '../../types';
 
 interface QueueDisplayProps {
@@ -134,11 +134,11 @@ export default function QueueDisplay({
                     height: ticketHeight,
                     minHeight: minTicketHeight,
                     maxHeight: '80px',
-                    // UPDATED: Use configurable colors from node configuration
+                    // UPDATED: Use configurable colors from node configuration - NO OPACITY
                     backgroundColor: isCompleted ? ticketCompletedColor : ticketBeingServedColor,
                     borderColor: isCompleted ? ticketCompletedColor : ticketBeingServedColor,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                    opacity: isCompleted ? 0.85 : 1 // Slightly transparent for completed tickets
+                    // REMOVED: opacity for completed tickets - now they have full opacity
                   }}
                 >
                   {/* FIXED: Internal highlight effects - NO box resizing, only content animation */}
@@ -154,12 +154,7 @@ export default function QueueDisplay({
                     </>
                   )}
 
-                  {/* Check icon for completed tickets */}
-                  {isCompleted && (
-                    <div className="absolute top-1 right-1 bg-white bg-opacity-90 rounded-full p-1 z-30">
-                      <CheckCircle size={16} className="text-white" />
-                    </div>
-                  )}
+                  {/* REMOVED: Check icon for completed tickets - no longer showing completion icon */}
                   
                   {/* FIXED: SIMPLIFIED ticket content - ONLY basic info */}
                   <div className={`relative z-20 flex items-center justify-between w-full text-white ${
