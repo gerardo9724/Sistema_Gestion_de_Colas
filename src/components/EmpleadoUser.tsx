@@ -484,7 +484,7 @@ export default function EmpleadoUser() {
                   className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
                 >
                   <SkipForward size={20} />
-                  <span>Siguiente</span>
+                  <span>Finalizar y Siguiente</span>
                 </button>
                 
                 <button
@@ -522,7 +522,7 @@ export default function EmpleadoUser() {
       {/* Waiting Queue */}
       <div className="bg-white rounded-2xl shadow-xl p-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          Cola Priorizada ({waitingTickets.length})
+          Cola de Espera ({waitingTickets.length})
         </h2>
         
         <div className="space-y-4 max-h-96 overflow-y-auto">
