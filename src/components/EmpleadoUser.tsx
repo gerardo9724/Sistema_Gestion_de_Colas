@@ -43,49 +43,85 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
   
-  // FIXED: Get pause state from the actual employee in state, not local variable
+  // CRITICAL: Get the actual employee state from the context, not local state
   const actualEmployee = state.employees.find(e => e.id === currentEmployee?.id);
   const isPaused = actualEmployee?.isPaused || false;
 
-  // FIXED: State persistence - restore timer state when employee has active ticket
+  // CRITICAL: Find the current ticket being served by this employee
+  const currentTicket = state.tickets.find(ticket => 
+    ticket.status === 'being_served' && ticket.servedBy === currentEmployee?.id
+  );
+
+  // FIXED: Complete state restoration when employee has active ticket
   useEffect(() => {
+    console.log('🔄 Employee state restoration check...');
+    console.log('Current Employee:', currentEmployee?.name);
+    console.log('Available tickets:', state.tickets.length);
+    
     if (currentEmployee && state.tickets.length > 0) {
+      // Find any ticket being served by this employee
       const activeTicket = state.tickets.find(t => 
         t.status === 'being_served' && t.servedBy === currentEmployee.id
       );
       
-      if (activeTicket && activeTicket.servedAt) {
-        console.log('🔄 Restoring employee state - found active ticket:', activeTicket.number);
-        setServiceStartTime(new Date(activeTicket.servedAt));
-        setIsTimerRunning(true);
+      if (activeTicket) {
+        console.log('✅ Found active ticket for employee:', {
+          ticketNumber: activeTicket.number,
+          servedAt: activeTicket.servedAt,
+          employeeName: currentEmployee.name
+        });
         
-        // Calculate elapsed time from when service started
-        const elapsed = Math.floor((new Date().getTime() - new Date(activeTicket.servedAt).getTime()) / 1000);
-        setElapsedTime(elapsed);
-        
-        console.log('✅ Employee state restored - Timer running, elapsed time:', elapsed);
+        if (activeTicket.servedAt) {
+          const servedTime = new Date(activeTicket.servedAt);
+          setServiceStartTime(servedTime);
+          setIsTimerRunning(true);
+          
+          // Calculate elapsed time from when service started
+          const elapsed = Math.floor((new Date().getTime() - servedTime.getTime()) / 1000);
+          setElapsedTime(elapsed);
+          
+          console.log('🔄 Employee state restored successfully:', {
+            serviceStartTime: servedTime,
+            elapsedTime: elapsed,
+            isTimerRunning: true
+          });
+        }
+      } else {
+        console.log('ℹ️ No active ticket found for employee');
+        // Reset timer state if no active ticket
+        setServiceStartTime(null);
+        setElapsedTime(0);
+        setIsTimerRunning(false);
       }
     }
-  }, [currentEmployee, state.tickets]);
+  }, [currentEmployee?.id, state.tickets]); // Re-run when employee or tickets change
 
-  // Auto-pause employee on login
+  // FIXED: Update employee's currentTicketId when ticket state changes
   useEffect(() => {
-    const initializeEmployeePauseState = async () => {
-      if (currentEmployee && !currentEmployee.isPaused) {
-        try {
-          await employeeService.updateEmployee(currentEmployee.id, {
-            ...currentEmployee,
-            isPaused: true
-          });
-        } catch (error) {
-          console.error('Error setting initial pause state:', error);
-        }
+    if (currentEmployee && currentTicket) {
+      // Ensure employee record has the correct currentTicketId
+      if (currentEmployee.currentTicketId !== currentTicket.id) {
+        console.log('🔄 Syncing employee currentTicketId with actual ticket');
+        employeeService.updateEmployee(currentEmployee.id, {
+          ...currentEmployee,
+          currentTicketId: currentTicket.id
+        }).catch(error => {
+          console.error('Error syncing employee ticket ID:', error);
+        });
       }
-    };
+    } else if (currentEmployee && !currentTicket && currentEmployee.currentTicketId) {
+      // Clear currentTicketId if no active ticket
+      console.log('🔄 Clearing employee currentTicketId - no active ticket');
+      employeeService.updateEmployee(currentEmployee.id, {
+        ...currentEmployee,
+        currentTicketId: undefined
+      }).catch(error => {
+        console.error('Error clearing employee ticket ID:', error);
+      });
+    }
+  }, [currentEmployee, currentTicket]);
 
-    initializeEmployeePauseState();
-  }, [currentEmployee?.id]);
-
+  // Timer update effect
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isTimerRunning && serviceStartTime) {
@@ -103,10 +139,6 @@ export default function EmpleadoUser() {
   // FIXED: Corrected toggle pause logic to use current state from context
   const handleTogglePause = async () => {
     if (!currentEmployee) return;
-
-    const currentTicket = state.tickets.find(t => 
-      t.status === 'being_served' && t.servedBy === currentEmployee.id
-    );
 
     if (currentTicket) {
       alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
@@ -219,13 +251,7 @@ export default function EmpleadoUser() {
 
   // FIXED: Handle ticket recall (call client again in the node) - NO POPUP
   const handleRecallTicket = async () => {
-    if (!currentEmployee) return;
-
-    const currentTicket = state.tickets.find(t => 
-      t.status === 'being_served' && t.servedBy === currentEmployee.id
-    );
-
-    if (!currentTicket) {
+    if (!currentEmployee || !currentTicket) {
       console.warn('No hay ticket en atención para volver a llamar');
       return;
     }
@@ -247,16 +273,7 @@ export default function EmpleadoUser() {
 
   // NEW: Handle ticket derivation
   const handleDeriveTicket = async (targetType: 'queue' | 'employee', targetId?: string, newServiceType?: string) => {
-    if (!currentEmployee) return;
-
-    const currentTicket = state.tickets.find(t => 
-      t.status === 'being_served' && t.servedBy === currentEmployee.id
-    );
-
-    if (!currentTicket) {
-      alert('No hay ticket en atención para derivar');
-      return;
-    }
+    if (!currentEmployee || !currentTicket) return;
 
     try {
       if (targetType === 'queue') {
@@ -313,13 +330,7 @@ export default function EmpleadoUser() {
   };
 
   const handleCancelTicket = async () => {
-    if (!currentEmployee) return;
-
-    const currentTicket = state.tickets.find(t => 
-      t.status === 'being_served' && t.servedBy === currentEmployee.id
-    );
-
-    if (!currentTicket) return;
+    if (!currentEmployee || !currentTicket) return;
 
     if (!cancellationReason.trim()) {
       setError('Debe seleccionar un motivo de cancelación');
@@ -407,10 +418,6 @@ export default function EmpleadoUser() {
     .filter(ticket => ticket.status === 'waiting')
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  const currentTicket = state.tickets.find(ticket => 
-    ticket.status === 'being_served' && ticket.servedBy === currentEmployee?.id
-  );
-
   const tabs = [
     { id: 'queue', name: 'Cola de Tickets', icon: Clock },
     { id: 'profile', name: 'Mi Perfil', icon: User },
@@ -422,7 +429,7 @@ export default function EmpleadoUser() {
       <div className="bg-white rounded-2xl shadow-xl p-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">Servicio Actual</h2>
         
-        {isPaused ? (
+        {isPaused && !currentTicket ? (
           <div className="text-center py-12">
             <Coffee size={64} className="mx-auto text-orange-400 mb-4" />
             <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
@@ -687,6 +694,24 @@ export default function EmpleadoUser() {
                       </span>
                     </div>
                   </div>
+                  {/* NEW: Current Ticket Status */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">Ticket Actual</label>
+                    <div className="p-3 bg-white border border-blue-300 rounded-lg">
+                      {currentTicket ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-blue-800 font-semibold">
+                            #{currentTicket.number.toString().padStart(3, '0')} - {currentTicket.serviceType.toUpperCase()}
+                          </span>
+                          <span className="text-xs text-blue-600">
+                            {serviceStartTime ? `Tiempo: ${formatTime(elapsedTime)}` : 'Iniciando...'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">Sin ticket asignado</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -735,7 +760,8 @@ export default function EmpleadoUser() {
                 <li>• Solo puedes cambiar tu contraseña desde este panel</li>
                 <li>• Para modificar otros datos, contacta al administrador</li>
                 <li>• Las estadísticas se actualizan automáticamente</li>
-                <li>• El estado del empleado se mantiene al cerrar y abrir el sistema</li>
+                <li>• <strong>El estado del empleado se mantiene al cerrar y abrir el sistema</strong></li>
+                <li>• <strong>Si tienes un ticket en atención, se restaurará automáticamente</strong></li>
               </ul>
             </div>
           </div>
@@ -782,6 +808,17 @@ export default function EmpleadoUser() {
                   {currentEmployee.position}
                 </span>
               </div>
+              {/* NEW: Current Ticket Indicator in Header */}
+              {currentTicket && (
+                <div className="bg-green-100 border border-green-300 rounded-lg px-3 py-2">
+                  <div className="text-green-800 font-semibold text-sm">
+                    Atendiendo: #{currentTicket.number.toString().padStart(3, '0')}
+                  </div>
+                  <div className="text-green-600 text-xs">
+                    {serviceStartTime ? formatTime(elapsedTime) : 'Iniciando...'}
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="flex items-center space-x-4">
