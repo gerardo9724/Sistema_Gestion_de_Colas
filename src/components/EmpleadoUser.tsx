@@ -1,18 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, AlertTriangle, Key } from 'lucide-react';
+import { 
+  Clock, 
+  User, 
+  CheckCircle, 
+  SkipForward, 
+  Play, 
+  Pause, 
+  LogOut, 
+  Coffee, 
+  X, 
+  AlertTriangle,
+  Users,
+  Timer,
+  Key,
+  Edit,
+  BarChart3,
+  Volume2
+} from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { authService } from '../services/authService';
 import { ticketService } from '../services/ticketService';
 import { employeeService } from '../services/employeeService';
 
-// Import new components
-import EmployeeHeader from './employee/EmployeeHeader';
-import CurrentTicketCard from './employee/CurrentTicketCard';
-import QueueList from './employee/QueueList';
-import EmployeeProfile from './employee/EmployeeProfile';
-import DeriveTicketModal from './employee/DeriveTicketModal';
-
-type TabType = 'queue' | 'profile'; // REMOVED: 'stats' - employees shouldn't see statistics
+type TabType = 'queue' | 'profile';
 
 export default function EmpleadoUser() {
   const { state, dispatch } = useApp();
@@ -22,7 +32,6 @@ export default function EmpleadoUser() {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showDeriveModal, setShowDeriveModal] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancellationComment, setCancellationComment] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -32,7 +41,10 @@ export default function EmpleadoUser() {
 
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
-  const isPaused = currentEmployee?.isPaused || false;
+  
+  // FIXED: Get pause state from the actual employee in state, not local variable
+  const actualEmployee = state.employees.find(e => e.id === currentEmployee?.id);
+  const isPaused = actualEmployee?.isPaused || false;
 
   // Auto-pause employee on login
   useEffect(() => {
@@ -66,7 +78,7 @@ export default function EmpleadoUser() {
     dispatch({ type: 'LOGOUT' });
   };
 
-  // FIXED: Corrected toggle pause logic
+  // FIXED: Corrected toggle pause logic to use current state from context
   const handleTogglePause = async () => {
     if (!currentEmployee) return;
 
@@ -83,6 +95,8 @@ export default function EmpleadoUser() {
       // FIXED: Use the current state from the context, not the local state
       const updatedEmployee = state.employees.find(e => e.id === currentEmployee.id);
       if (!updatedEmployee) return;
+
+      console.log('🔄 Toggling pause state from:', updatedEmployee.isPaused, 'to:', !updatedEmployee.isPaused);
 
       await employeeService.updateEmployee(currentEmployee.id, {
         ...updatedEmployee,
@@ -232,65 +246,29 @@ export default function EmpleadoUser() {
     }
   };
 
-  // NEW: Handle ticket derivation
-  const handleDeriveTicket = async (targetType: 'queue' | 'employee', targetId?: string, newServiceType?: string) => {
+  // NEW: Handle ticket recall (call client again in the node)
+  const handleRecallTicket = async () => {
     if (!currentEmployee) return;
 
     const currentTicket = state.tickets.find(t => 
       t.status === 'being_served' && t.servedBy === currentEmployee.id
     );
 
-    if (!currentTicket) return;
+    if (!currentTicket) {
+      alert('No hay ticket en atención para volver a llamar');
+      return;
+    }
 
     try {
-      const updates: any = {
-        status: 'waiting',
-        servedBy: undefined,
-        servedAt: undefined,
-        // Reset queue position to end of queue
-        queuePosition: state.tickets.filter(t => t.status === 'waiting').length + 1
-      };
-
-      // If changing service type
-      if (newServiceType && newServiceType !== currentTicket.serviceType) {
-        updates.serviceType = newServiceType;
-      }
-
-      // If assigning to specific employee
-      if (targetType === 'employee' && targetId) {
-        updates.status = 'being_served';
-        updates.servedBy = targetId;
-        updates.servedAt = new Date();
-        
-        // Update target employee
-        const targetEmployee = state.employees.find(e => e.id === targetId);
-        if (targetEmployee) {
-          await employeeService.updateEmployee(targetId, {
-            ...targetEmployee,
-            currentTicketId: currentTicket.id,
-            isPaused: false
-          });
-        }
-      }
-
-      await ticketService.updateTicket(currentTicket.id, updates);
-
-      // Update current employee
-      await employeeService.updateEmployee(currentEmployee.id, {
-        ...currentEmployee,
-        currentTicketId: undefined,
-        isPaused: true
+      // Update the ticket's servedAt time to trigger a new announcement
+      await ticketService.updateTicket(currentTicket.id, {
+        servedAt: new Date() // This will trigger the audio system to announce again
       });
 
-      setServiceStartTime(null);
-      setElapsedTime(0);
-      setIsTimerRunning(false);
-      setShowDeriveModal(false);
-      
-      alert(`Ticket derivado ${targetType === 'employee' ? 'al empleado seleccionado' : 'a la cola general'} exitosamente`);
+      alert('Cliente llamado nuevamente. El anuncio se reproducirá en el módulo nodo.');
     } catch (error) {
-      console.error('Error deriving ticket:', error);
-      alert('Error al derivar el ticket');
+      console.error('Error recalling ticket:', error);
+      alert('Error al volver a llamar el cliente');
     }
   };
 
@@ -328,6 +306,12 @@ export default function EmpleadoUser() {
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const waitingTickets = state.tickets
     .filter(ticket => ticket.status === 'waiting')
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -336,86 +320,301 @@ export default function EmpleadoUser() {
     ticket.status === 'being_served' && ticket.servedBy === currentEmployee?.id
   );
 
-  // UPDATED: Removed 'stats' tab - employees shouldn't see statistics
   const tabs = [
-    { id: 'queue', name: 'Cola de Tickets', icon: Coffee },
-    { id: 'profile', name: 'Mi Perfil', icon: Coffee },
+    { id: 'queue', name: 'Cola de Tickets', icon: Clock },
+    { id: 'profile', name: 'Mi Perfil', icon: User },
   ];
 
   const renderQueue = () => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       {/* Current Service */}
-      <div>
+      <div className="bg-white rounded-2xl shadow-xl p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">Servicio Actual</h2>
+        
         {isPaused ? (
-          <div className="bg-white rounded-2xl shadow-xl p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Servicio Actual</h2>
-            <div className="text-center py-12">
-              <Coffee size={64} className="mx-auto text-orange-400 mb-4" />
-              <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
-              <p className="text-lg text-gray-600 mb-6">
-                {waitingTickets.length > 0 
-                  ? 'Presiona "Reanudar" para comenzar a atender tickets'
-                  : 'No hay tickets pendientes. Esperando nuevos tickets...'
-                }
-              </p>
-              {waitingTickets.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                  <p className="text-yellow-800 text-sm mb-2">
-                    <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
-                  </p>
-                  <p className="text-yellow-700 text-xs">
-                    Al reanudar, automáticamente tomarás este ticket para atención
-                  </p>
-                </div>
-              )}
-              <button
-                onClick={handleTogglePause}
-                disabled={waitingTickets.length === 0}
-                className={`py-3 px-8 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2 mx-auto ${
-                  waitingTickets.length > 0
-                    ? 'bg-green-500 hover:bg-green-600 text-white'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-              >
-                <Coffee size={20} />
-                <span>Reanudar</span>
-              </button>
-            </div>
+          <div className="text-center py-12">
+            <Coffee size={64} className="mx-auto text-orange-400 mb-4" />
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
+            <p className="text-lg text-gray-600 mb-6">
+              {waitingTickets.length > 0 
+                ? 'Presiona "Reanudar" para comenzar a atender tickets'
+                : 'No hay tickets pendientes. Esperando nuevos tickets...'
+              }
+            </p>
+            {waitingTickets.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <p className="text-yellow-800 text-sm mb-2">
+                  <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
+                </p>
+                <p className="text-yellow-700 text-xs">
+                  Al reanudar, automáticamente tomarás este ticket para atención
+                </p>
+              </div>
+            )}
+            <button
+              onClick={handleTogglePause}
+              disabled={waitingTickets.length === 0}
+              className={`py-3 px-8 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2 mx-auto ${
+                waitingTickets.length > 0
+                  ? 'bg-green-500 hover:bg-green-600 text-white'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <Play size={20} />
+              <span>Reanudar</span>
+            </button>
           </div>
         ) : currentTicket ? (
-          <CurrentTicketCard
-            ticket={currentTicket}
-            elapsedTime={elapsedTime}
-            isTimerRunning={isTimerRunning}
-            onToggleTimer={() => setIsTimerRunning(!isTimerRunning)}
-            onCompleteTicket={(callNext) => handleCompleteTicket(currentTicket.id, callNext)}
-            onCancelTicket={() => setShowCancelModal(true)}
-            onDeriveTicket={() => setShowDeriveModal(true)}
-          />
-        ) : (
-          <div className="bg-white rounded-2xl shadow-xl p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Servicio Actual</h2>
-            <div className="text-center py-12">
-              <Coffee size={64} className="mx-auto text-gray-300 mb-4" />
-              <p className="text-xl text-gray-500">No hay tickets en atención</p>
-              <p className="text-gray-400">
-                {waitingTickets.length > 0 
-                  ? 'Presiona "Reanudar" para tomar el siguiente ticket'
-                  : 'Esperando nuevos tickets...'
-                }
-              </p>
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <div className="text-4xl font-bold text-gray-800 mb-2">
+                    #{currentTicket.number.toString().padStart(3, '0')}
+                  </div>
+                  <div className="text-xl font-semibold text-gray-600">
+                    {currentTicket.serviceType.charAt(0).toUpperCase() + currentTicket.serviceType.slice(1)}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Creado: {currentTicket.createdAt.toLocaleTimeString()}
+                  </div>
+                  {currentTicket.waitTime && (
+                    <div className="text-sm text-gray-500">
+                      Tiempo de espera: {formatTime(currentTicket.waitTime)}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="text-right">
+                  <div className="flex items-center space-x-2 text-2xl font-bold text-green-600">
+                    <Timer size={32} />
+                    <span>{formatTime(elapsedTime)}</span>
+                  </div>
+                  <button
+                    onClick={() => setIsTimerRunning(!isTimerRunning)}
+                    className="mt-2 p-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors"
+                  >
+                    {isTimerRunning ? <Pause size={20} /> : <Play size={20} />}
+                  </button>
+                </div>
+              </div>
+              
+              {/* NEW: Added Recall Button */}
+              <div className="mb-4">
+                <button
+                  onClick={handleRecallTicket}
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Volume2 size={20} />
+                  <span>Volver a Llamar Cliente</span>
+                </button>
+                <p className="text-xs text-gray-500 mt-1 text-center">
+                  El anuncio se reproducirá nuevamente en el módulo nodo
+                </p>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => handleCompleteTicket(currentTicket.id)}
+                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                >
+                  <CheckCircle size={20} />
+                  <span>Finalizar</span>
+                </button>
+                
+                <button
+                  onClick={() => handleCompleteTicket(currentTicket.id, true)}
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                >
+                  <SkipForward size={20} />
+                  <span>Finalizar y Siguiente</span>
+                </button>
+                
+                <button
+                  onClick={() => setShowCancelModal(true)}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                >
+                  <X size={20} />
+                  <span>Cancelar</span>
+                </button>
+              </div>
             </div>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <User size={64} className="mx-auto text-gray-300 mb-4" />
+            <p className="text-xl text-gray-500">No hay tickets en atención</p>
+            <p className="text-gray-400">
+              {waitingTickets.length > 0 
+                ? 'Presiona "Reanudar" para tomar el siguiente ticket'
+                : 'Esperando nuevos tickets...'
+              }
+            </p>
           </div>
         )}
       </div>
 
       {/* Waiting Queue */}
-      <QueueList
-        tickets={waitingTickets}
-        currentTicket={currentTicket}
-        isPaused={isPaused}
-        onStartService={handleStartService}
-      />
+      <div className="bg-white rounded-2xl shadow-xl p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">
+          Cola de Espera ({waitingTickets.length})
+        </h2>
+        
+        <div className="space-y-4 max-h-96 overflow-y-auto">
+          {waitingTickets.map((ticket, index) => {
+            const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
+            
+            return (
+              <div
+                key={ticket.id}
+                className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                  index === 0 
+                    ? 'border-yellow-400 bg-yellow-50' 
+                    : 'border-gray-200 bg-gray-50'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="flex items-center space-x-3">
+                      <div className="text-2xl font-bold text-gray-800">
+                        #{ticket.number.toString().padStart(3, '0')}
+                      </div>
+                      {index === 0 && (
+                        <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full">
+                          SIGUIENTE
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-lg font-semibold text-gray-600">
+                      {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {ticket.createdAt.toLocaleTimeString()}
+                    </div>
+                    <div className="text-sm text-orange-600 font-medium">
+                      Esperando: {formatTime(waitTime)}
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => handleStartService(ticket.id)}
+                    disabled={currentTicket !== undefined || index !== 0 || isPaused}
+                    className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                      index === 0 && !currentTicket && !isPaused
+                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {index === 0 && isPaused ? 'Reanudar primero' : index === 0 ? 'Atender' : 'Esperar turno'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          
+          {waitingTickets.length === 0 && (
+            <div className="text-center py-12">
+              <Clock size={64} className="mx-auto text-gray-300 mb-4" />
+              <p className="text-xl text-gray-500">No hay tickets en espera</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderProfile = () => (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">Mi Perfil</h2>
+        
+        {currentUser && (
+          <div className="space-y-6">
+            {/* User Info - READ ONLY */}
+            <div className="bg-gray-50 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Información Personal</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                  <div className="p-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600">
+                    {currentUser.name}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Solo lectura - Contacta al administrador para cambios</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
+                  <div className="p-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600">
+                    {currentUser.username}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Solo lectura - Contacta al administrador para cambios</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                  <div className="p-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600">
+                    Empleado
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                  <div className="p-3 bg-gray-100 border border-gray-300 rounded-lg">
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                      Activo
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Employee Info - READ ONLY */}
+            {currentEmployee && (
+              <div className="bg-blue-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-blue-800 mb-4">Información de Empleado</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-blue-700 mb-1">Posición</label>
+                    <div className="p-3 bg-white border border-blue-300 rounded-lg text-blue-800">
+                      {currentEmployee.position}
+                    </div>
+                    <p className="text-xs text-blue-600 mt-1">Solo lectura - Contacta al administrador para cambios</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-blue-700 mb-1">Estado Actual</label>
+                    <div className="p-3 bg-white border border-blue-300 rounded-lg">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        isPaused ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'
+                      }`}>
+                        {isPaused ? 'En Pausa' : 'Disponible'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons - ONLY PASSWORD CHANGE */}
+            <div className="flex justify-center">
+              <button
+                onClick={() => setShowPasswordModal(true)}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+              >
+                <Key size={20} />
+                <span>Cambiar Contraseña</span>
+              </button>
+            </div>
+
+            {/* Information Notice */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h4 className="font-semibold text-yellow-800 mb-2">ℹ️ Información Importante</h4>
+              <ul className="text-sm text-yellow-700 space-y-1">
+                <li>• Los datos personales y de empleado son de solo lectura</li>
+                <li>• Solo puedes cambiar tu contraseña desde este panel</li>
+                <li>• Para modificar otros datos, contacta al administrador</li>
+                <li>• Las estadísticas se actualizan automáticamente</li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -424,7 +623,7 @@ export default function EmpleadoUser() {
       <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center p-6">
         <div className="bg-white rounded-3xl shadow-2xl p-12 text-center max-w-md">
           <div className="text-red-500 mb-4">
-            <Coffee size={64} className="mx-auto" />
+            <User size={64} className="mx-auto" />
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Error de Configuración</h2>
           <p className="text-gray-600 mb-6">
@@ -444,15 +643,69 @@ export default function EmpleadoUser() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
       {/* Header */}
-      <EmployeeHeader
-        currentUser={currentUser}
-        currentEmployee={currentEmployee}
-        isConnected={state.isFirebaseConnected}
-        isPaused={isPaused}
-        hasCurrentTicket={currentTicket !== undefined}
-        onLogout={handleLogout}
-        onTogglePause={handleTogglePause}
-      />
+      <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-3xl font-bold text-gray-800">Panel de Empleado</h1>
+              <div className="flex flex-col">
+                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                  {currentUser.name}
+                </span>
+                <span className="text-xs text-gray-600 mt-1">
+                  {currentEmployee.position}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div className="text-lg text-gray-600">
+                {new Date().toLocaleTimeString()}
+              </div>
+              
+              {/* Connection Status */}
+              <div className="bg-white rounded-lg px-4 py-2 shadow-md">
+                <div className="flex items-center space-x-2">
+                  {state.isFirebaseConnected ? (
+                    <>
+                      <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm text-green-700 font-medium">Firebase</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                      <span className="text-sm text-red-700 font-medium">Sin conexión</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              <button
+                onClick={handleTogglePause}
+                disabled={currentTicket !== undefined}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors font-semibold ${
+                  currentTicket 
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : isPaused 
+                      ? 'bg-green-500 hover:bg-green-600 text-white' 
+                      : 'bg-orange-500 hover:bg-orange-600 text-white'
+                }`}
+              >
+                {isPaused ? <Play size={20} /> : <Pause size={20} />}
+                <span>{isPaused ? 'Reanudar' : 'Pausar'}</span>
+              </button>
+              
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                <LogOut size={20} />
+                <span>Cerrar Sesión</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
@@ -484,28 +737,10 @@ export default function EmpleadoUser() {
           {/* Main Content */}
           <div className="flex-1">
             {activeTab === 'queue' && renderQueue()}
-            {activeTab === 'profile' && (
-              <EmployeeProfile
-                currentUser={currentUser}
-                currentEmployee={currentEmployee}
-                onChangePassword={() => setShowPasswordModal(true)}
-                onUpdateProfile={() => {}} // DISABLED: No profile editing for employees
-              />
-            )}
+            {activeTab === 'profile' && renderProfile()}
           </div>
         </div>
       </div>
-
-      {/* Derive Ticket Modal */}
-      {showDeriveModal && currentTicket && (
-        <DeriveTicketModal
-          ticket={currentTicket}
-          employees={state.employees}
-          serviceCategories={state.serviceCategories}
-          onClose={() => setShowDeriveModal(false)}
-          onDerive={handleDeriveTicket}
-        />
-      )}
 
       {/* Cancel Ticket Modal */}
       {showCancelModal && (
