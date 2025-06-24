@@ -13,14 +13,14 @@ import {
   Users,
   Timer,
   Key,
-  Edit,
-  BarChart3,
-  Volume2
+  Volume2,
+  ArrowRight
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { authService } from '../services/authService';
 import { ticketService } from '../services/ticketService';
 import { employeeService } from '../services/employeeService';
+import DeriveTicketModal from './employee/DeriveTicketModal';
 
 type TabType = 'queue' | 'profile';
 
@@ -32,6 +32,7 @@ export default function EmpleadoUser() {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showDeriveModal, setShowDeriveModal] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancellationComment, setCancellationComment] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -45,6 +46,27 @@ export default function EmpleadoUser() {
   // FIXED: Get pause state from the actual employee in state, not local variable
   const actualEmployee = state.employees.find(e => e.id === currentEmployee?.id);
   const isPaused = actualEmployee?.isPaused || false;
+
+  // FIXED: State persistence - restore timer state when employee has active ticket
+  useEffect(() => {
+    if (currentEmployee && state.tickets.length > 0) {
+      const activeTicket = state.tickets.find(t => 
+        t.status === 'being_served' && t.servedBy === currentEmployee.id
+      );
+      
+      if (activeTicket && activeTicket.servedAt) {
+        console.log('🔄 Restoring employee state - found active ticket:', activeTicket.number);
+        setServiceStartTime(new Date(activeTicket.servedAt));
+        setIsTimerRunning(true);
+        
+        // Calculate elapsed time from when service started
+        const elapsed = Math.floor((new Date().getTime() - new Date(activeTicket.servedAt).getTime()) / 1000);
+        setElapsedTime(elapsed);
+        
+        console.log('✅ Employee state restored - Timer running, elapsed time:', elapsed);
+      }
+    }
+  }, [currentEmployee, state.tickets]);
 
   // Auto-pause employee on login
   useEffect(() => {
@@ -220,6 +242,73 @@ export default function EmpleadoUser() {
       console.log('✅ Ticket recall triggered successfully');
     } catch (error) {
       console.error('❌ Error recalling ticket:', error);
+    }
+  };
+
+  // NEW: Handle ticket derivation
+  const handleDeriveTicket = async (targetType: 'queue' | 'employee', targetId?: string, newServiceType?: string) => {
+    if (!currentEmployee) return;
+
+    const currentTicket = state.tickets.find(t => 
+      t.status === 'being_served' && t.servedBy === currentEmployee.id
+    );
+
+    if (!currentTicket) {
+      alert('No hay ticket en atención para derivar');
+      return;
+    }
+
+    try {
+      if (targetType === 'queue') {
+        // Return ticket to general queue
+        await ticketService.updateTicket(currentTicket.id, {
+          status: 'waiting',
+          servedBy: undefined,
+          servedAt: undefined,
+          serviceType: newServiceType || currentTicket.serviceType
+        });
+      } else if (targetType === 'employee' && targetId) {
+        // Assign to specific employee
+        const targetEmployee = state.employees.find(e => e.id === targetId);
+        if (!targetEmployee) {
+          alert('Empleado destino no encontrado');
+          return;
+        }
+
+        if (targetEmployee.currentTicketId) {
+          alert('El empleado destino ya tiene un ticket asignado');
+          return;
+        }
+
+        await ticketService.updateTicket(currentTicket.id, {
+          servedBy: targetId,
+          servedAt: new Date(),
+          serviceType: newServiceType || currentTicket.serviceType
+        });
+
+        await employeeService.updateEmployee(targetId, {
+          ...targetEmployee,
+          currentTicketId: currentTicket.id,
+          isPaused: false
+        });
+      }
+
+      // Update current employee
+      await employeeService.updateEmployee(currentEmployee.id, {
+        ...currentEmployee,
+        currentTicketId: undefined,
+        isPaused: true
+      });
+
+      setServiceStartTime(null);
+      setElapsedTime(0);
+      setIsTimerRunning(false);
+      setShowDeriveModal(false);
+
+      alert('Ticket derivado exitosamente');
+    } catch (error) {
+      console.error('Error deriving ticket:', error);
+      alert('Error al derivar ticket');
     }
   };
 
@@ -415,10 +504,10 @@ export default function EmpleadoUser() {
                 </p>
               </div>
               
-              <div className="flex space-x-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <button
                   onClick={() => handleCompleteTicket(currentTicket.id)}
-                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                  className="bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
                 >
                   <CheckCircle size={20} />
                   <span>Finalizar</span>
@@ -426,15 +515,24 @@ export default function EmpleadoUser() {
                 
                 <button
                   onClick={() => handleCompleteTicket(currentTicket.id, true)}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                  className="bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
                 >
                   <SkipForward size={20} />
                   <span>Finalizar y Siguiente</span>
                 </button>
                 
+                {/* NEW: Derive Button */}
+                <button
+                  onClick={() => setShowDeriveModal(true)}
+                  className="bg-purple-500 hover:bg-purple-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                >
+                  <ArrowRight size={20} />
+                  <span>Derivar</span>
+                </button>
+                
                 <button
                   onClick={() => setShowCancelModal(true)}
-                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                  className="bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
                 >
                   <X size={20} />
                   <span>Cancelar</span>
@@ -593,6 +691,31 @@ export default function EmpleadoUser() {
               </div>
             )}
 
+            {/* Statistics - READ ONLY */}
+            {currentEmployee && (
+              <div className="bg-green-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-green-800 mb-4">Estadísticas Personales</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white border border-green-300 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">{currentEmployee.totalTicketsServed}</div>
+                    <div className="text-sm text-green-700">Tickets Atendidos</div>
+                  </div>
+                  <div className="bg-white border border-green-300 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-red-600">{currentEmployee.totalTicketsCancelled}</div>
+                    <div className="text-sm text-green-700">Tickets Cancelados</div>
+                  </div>
+                  <div className="bg-white border border-green-300 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {currentEmployee.totalTicketsServed + currentEmployee.totalTicketsCancelled > 0
+                        ? Math.round((currentEmployee.totalTicketsServed / (currentEmployee.totalTicketsServed + currentEmployee.totalTicketsCancelled)) * 100)
+                        : 0}%
+                    </div>
+                    <div className="text-sm text-green-700">Eficiencia</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons - ONLY PASSWORD CHANGE */}
             <div className="flex justify-center">
               <button
@@ -612,6 +735,7 @@ export default function EmpleadoUser() {
                 <li>• Solo puedes cambiar tu contraseña desde este panel</li>
                 <li>• Para modificar otros datos, contacta al administrador</li>
                 <li>• Las estadísticas se actualizan automáticamente</li>
+                <li>• El estado del empleado se mantiene al cerrar y abrir el sistema</li>
               </ul>
             </div>
           </div>
@@ -889,6 +1013,17 @@ export default function EmpleadoUser() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* NEW: Derive Ticket Modal */}
+      {showDeriveModal && currentTicket && (
+        <DeriveTicketModal
+          ticket={currentTicket}
+          employees={state.employees}
+          serviceCategories={state.serviceCategories}
+          onClose={() => setShowDeriveModal(false)}
+          onDerive={handleDeriveTicket}
+        />
       )}
     </div>
   );
