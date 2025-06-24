@@ -31,11 +31,11 @@ export default function CarouselDisplay({
       return <span>{carouselTitle}</span>;
     }
 
-    // Calculate animation duration based on text length and speed
-    const baseSpeed = 20;
-    const speedMultiplier = (11 - scrollingSpeed) / 10;
+    // IMPROVED: Calculate animation duration for smooth, complete scrolling
+    const baseSpeed = 15; // Reduced base speed for smoother animation
+    const speedMultiplier = (11 - scrollingSpeed) / 10; // Convert 1-10 scale to 0.1-1.0
     const textLength = carouselTitle.length;
-    const lengthFactor = Math.max(1, textLength / 20);
+    const lengthFactor = Math.max(1, textLength / 15); // Adjust for text length
     const animationDuration = baseSpeed * speedMultiplier * lengthFactor;
     
     // Generate unique animation name to avoid conflicts
@@ -56,8 +56,8 @@ export default function CarouselDisplay({
             0% {
               transform: translateX(100%);
             }
-            50% {
-              transform: translateX(-50%);
+            75% {
+              transform: translateX(-100%);
             }
             100% {
               transform: translateX(-100%);
