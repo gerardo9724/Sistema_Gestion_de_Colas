@@ -344,7 +344,7 @@ export default function EmpleadoUser() {
     }
   };
 
-  // NEW: Handle ticket derivation
+  // UPDATED: Handle ticket derivation - NO POP-UP CONFIRMATION
   const handleDeriveTicket = async (targetType: 'queue' | 'employee', targetId?: string, newServiceType?: string) => {
     if (!currentEmployee || !currentTicket) return;
 
@@ -399,7 +399,8 @@ export default function EmpleadoUser() {
       setIsTimerRunning(false);
       setShowDeriveModal(false);
 
-      alert('Ticket derivado exitosamente');
+      // REMOVED: No pop-up confirmation - ticket derivation completes silently
+      console.log('✅ Ticket derivado exitosamente - sin pop-up de confirmación');
     } catch (error) {
       console.error('Error deriving ticket:', error);
       alert('Error al derivar ticket');
