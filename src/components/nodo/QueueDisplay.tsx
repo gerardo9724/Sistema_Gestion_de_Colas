@@ -12,7 +12,7 @@ interface QueueDisplayProps {
   textColor: string;
   accentColor: string;
   enableAnimations: boolean;
-  isFullWidth?: boolean; // NEW: Indicates if queue should take full width
+  isFullWidth?: boolean;
 }
 
 export default function QueueDisplay({
@@ -25,21 +25,19 @@ export default function QueueDisplay({
   textColor,
   accentColor,
   enableAnimations,
-  isFullWidth = false // NEW: Default to half width
+  isFullWidth = false
 }: QueueDisplayProps) {
   
   const getBeingServedGridCols = () => {
     const count = beingServedTickets.length;
     
-    // NEW: Adjust grid based on full width mode
     if (isFullWidth) {
       if (count === 1) return 'grid-cols-1';
       if (count === 2) return 'grid-cols-2';
       if (count <= 4) return 'grid-cols-2';
       if (count <= 6) return 'grid-cols-3';
-      return 'grid-cols-4'; // More columns for full width
+      return 'grid-cols-4';
     } else {
-      // Original logic for half width
       if (count === 1) return 'grid-cols-1';
       if (count === 2) return 'grid-cols-2';
       if (count <= 4) return 'grid-cols-2';
@@ -47,7 +45,6 @@ export default function QueueDisplay({
     }
   };
 
-  // NEW: Adjust ticket size based on full width mode
   const ticketMinHeight = isFullWidth ? '100px' : '90px';
   const ticketMaxHeight = isFullWidth ? '120px' : '110px';
 
@@ -59,7 +56,7 @@ export default function QueueDisplay({
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {/* Currently Being Served - OPTIMIZED HEIGHT */}
+        {/* Currently Being Served */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
@@ -148,7 +145,7 @@ export default function QueueDisplay({
           </div>
         </div>
 
-        {/* Next in Queue - FURTHER OPTIMIZED AND COMPACT */}
+        {/* Next in Queue - REMOVED "SIGUIENTE" TEXT */}
         {showQueueInfo && (
           <div className="flex-shrink-0">
             <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-2 border border-gray-200 shadow-sm">
@@ -177,11 +174,7 @@ export default function QueueDisplay({
                       }`}>
                         #{ticket.number.toString().padStart(3, '0')}
                       </div>
-                      {index === 0 && (
-                        <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} text-yellow-800 font-semibold`}>
-                          SIGUIENTE
-                        </div>
-                      )}
+                      {/* REMOVED: "SIGUIENTE" text - now only shows ticket number */}
                     </div>
                   );
                 })}

@@ -13,7 +13,7 @@ export default function NodoUser() {
   const [highlightedTicket, setHighlightedTicket] = useState<string | null>(null);
   const [lastAnnouncedTicket, setLastAnnouncedTicket] = useState<string | null>(null);
 
-  // CRITICAL: Get node configuration from independent Firebase table
+  // Get node configuration from independent Firebase table
   const nodeConfig = React.useMemo(() => {
     if (state.nodeConfiguration) {
       console.log('📊 Using configuration from independent Firebase table:', state.nodeConfiguration);
@@ -26,7 +26,8 @@ export default function NodoUser() {
         showDateTime: state.nodeConfiguration.showDateTime,
         showConnectionStatus: state.nodeConfiguration.showConnectionStatus,
         showHeader: state.nodeConfiguration.showHeader ?? true,
-        showCarousel: state.nodeConfiguration.showCarousel ?? true, // NEW: Carousel visibility
+        showCarousel: state.nodeConfiguration.showCarousel ?? true,
+        showStatusBar: state.nodeConfiguration.showStatusBar ?? true, // NEW: Status bar visibility
         compactMode: state.nodeConfiguration.compactMode,
         
         // Audio Settings
@@ -51,7 +52,7 @@ export default function NodoUser() {
         showImageIndicators: state.nodeConfiguration.showImageIndicators,
         pauseOnHover: state.nodeConfiguration.pauseOnHover,
         
-        // NEW: Carousel Text Settings
+        // Carousel Text Settings
         carouselTitle: state.nodeConfiguration.carouselTitle || 'Publicidad',
         enableScrollingText: state.nodeConfiguration.enableScrollingText ?? false,
         scrollingSpeed: state.nodeConfiguration.scrollingSpeed || 5,
@@ -66,7 +67,8 @@ export default function NodoUser() {
         showDateTime: true,
         showConnectionStatus: true,
         showHeader: true,
-        showCarousel: true, // NEW: Default to show carousel
+        showCarousel: true,
+        showStatusBar: true, // NEW: Default to show status bar
         compactMode: false,
         enableAudio: true,
         audioVolume: 0.8,
@@ -82,9 +84,9 @@ export default function NodoUser() {
         showImageDescriptions: true,
         showImageIndicators: true,
         pauseOnHover: false,
-        carouselTitle: 'Publicidad', // NEW: Default title
-        enableScrollingText: false, // NEW: Default scrolling disabled
-        scrollingSpeed: 5, // NEW: Default speed
+        carouselTitle: 'Publicidad',
+        enableScrollingText: false,
+        scrollingSpeed: 5,
       };
     }
   }, [state.nodeConfiguration]);
@@ -141,16 +143,28 @@ export default function NodoUser() {
     color: nodeConfig.textColor,
   };
 
-  // Calculate dynamic height based on header visibility - OPTIMIZED FOR FULL SCREEN
-  const contentHeight = nodeConfig.showHeader ? 'h-[calc(100vh-120px)]' : 'h-[calc(100vh-40px)]';
+  // Calculate dynamic height based on header and status bar visibility
+  const getContentHeight = () => {
+    let height = 'h-screen';
+    
+    if (nodeConfig.showHeader && nodeConfig.showStatusBar) {
+      height = 'h-[calc(100vh-160px)]'; // Both header and status bar
+    } else if (nodeConfig.showHeader || nodeConfig.showStatusBar) {
+      height = 'h-[calc(100vh-80px)]'; // Only one of them
+    } else {
+      height = 'h-screen'; // Neither shown
+    }
+    
+    return height;
+  };
 
-  // NEW: Calculate layout based on carousel visibility
+  // Calculate layout based on carousel visibility
   const queueWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-full';
   const carouselWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-0';
 
   return (
     <div className="min-h-screen text-gray-800" style={customStyles}>
-      {/* Conditional Header Component - REDUCED HEIGHT */}
+      {/* Conditional Header Component */}
       {nodeConfig.showHeader && (
         <NodeHeader
           onBack={handleBack}
@@ -163,7 +177,7 @@ export default function NodoUser() {
         />
       )}
 
-      <div className={`flex ${contentHeight}`}>
+      <div className={`flex ${getContentHeight()}`}>
         {/* Queue Information - DYNAMIC WIDTH BASED ON CAROUSEL VISIBILITY */}
         <div className={`${queueWidth} p-3 transition-all duration-500`}>
           <QueueDisplay
@@ -176,7 +190,7 @@ export default function NodoUser() {
             textColor={nodeConfig.textColor}
             accentColor={nodeConfig.accentColor}
             enableAnimations={nodeConfig.enableAnimations}
-            isFullWidth={!nodeConfig.showCarousel} // NEW: Pass full width state
+            isFullWidth={!nodeConfig.showCarousel}
           />
         </div>
 
@@ -190,25 +204,27 @@ export default function NodoUser() {
               showImageIndicators={nodeConfig.showImageIndicators}
               enableAnimations={nodeConfig.enableAnimations}
               textColor={nodeConfig.textColor}
-              carouselTitle={nodeConfig.carouselTitle} // NEW: Custom title
-              enableScrollingText={nodeConfig.enableScrollingText} // NEW: Scrolling text
-              scrollingSpeed={nodeConfig.scrollingSpeed} // NEW: Scrolling speed
+              carouselTitle={nodeConfig.carouselTitle}
+              enableScrollingText={nodeConfig.enableScrollingText}
+              scrollingSpeed={nodeConfig.scrollingSpeed}
             />
           </div>
         )}
       </div>
 
-      {/* Status Bar Component - REDUCED HEIGHT */}
-      <StatusBar
-        waitingTicketsCount={waitingTickets.length}
-        beingServedTicketsCount={beingServedTickets.length}
-        activeEmployeesCount={state.employees.filter(e => e.isActive && !e.isPaused).length}
-        currentTime={currentTime}
-        audioEnabled={nodeConfig.enableAudio}
-        selectedVoice={nodeConfig.selectedVoice}
-        accentColor={nodeConfig.accentColor}
-        showCarousel={nodeConfig.showCarousel} // NEW: Pass carousel visibility
-      />
+      {/* Conditional Status Bar Component */}
+      {nodeConfig.showStatusBar && (
+        <StatusBar
+          waitingTicketsCount={waitingTickets.length}
+          beingServedTicketsCount={beingServedTickets.length}
+          activeEmployeesCount={state.employees.filter(e => e.isActive && !e.isPaused).length}
+          currentTime={currentTime}
+          audioEnabled={nodeConfig.enableAudio}
+          selectedVoice={nodeConfig.selectedVoice}
+          accentColor={nodeConfig.accentColor}
+          showCarousel={nodeConfig.showCarousel}
+        />
+      )}
 
       {/* Audio Manager Component */}
       <AudioManager
