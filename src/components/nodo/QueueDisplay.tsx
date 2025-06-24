@@ -72,28 +72,20 @@ export default function QueueDisplay({
   const ticketsToDisplay = allTicketsToShow();
 
   // FIXED: Calculate exact height per ticket to avoid scroll
-  const ticketHeight = `calc((100% - 120px) / ${maxTicketsDisplayed})`;
+  const ticketHeight = `calc((100% - 80px) / ${maxTicketsDisplayed})`;
   const minTicketHeight = '60px';
 
   return (
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col overflow-hidden">
-      <h2 className={`${isFullWidth ? 'text-2xl' : 'text-xl'} font-bold mb-4 text-center flex items-center justify-center space-x-2`} style={{ color: textColor }}>
-        <Users size={isFullWidth ? 28 : 24} style={{ color: accentColor }} />
-        <span>Tickets en Atención</span>
-      </h2>
+      {/* REMOVED: Main header "Tickets en Atención" - this was the highlighted section */}
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
         {/* UPDATED: Now shows both being served and completed tickets */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="flex items-center justify-center space-x-2 mb-3">
-            <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
-            <h3 className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold text-center`} style={{ color: textColor }}>
-              Tickets en Atención
-            </h3>
-          </div>
+          {/* REMOVED: Section header "Tickets en Atención" - this was part of the highlighted area */}
           
           {/* FIXED: Vertical distribution with exact sizing - NO SCROLL */}
-          <div className="flex-1 flex flex-col space-y-2" style={{ height: 'calc(100% - 40px)' }}>
+          <div className="flex-1 flex flex-col space-y-2" style={{ height: 'calc(100% - 0px)' }}>
             {Array.from({ length: maxTicketsDisplayed }).map((_, index) => {
               const ticket = ticketsToDisplay[index];
               
