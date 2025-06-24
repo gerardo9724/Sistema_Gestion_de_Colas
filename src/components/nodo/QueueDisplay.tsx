@@ -28,7 +28,7 @@ export default function QueueDisplay({
   isFullWidth = false
 }: QueueDisplayProps) {
 
-  // NEW: Get today's completed tickets following the same ordering logic
+  // FIXED: Get today's completed tickets following the same ordering logic
   const getTodaysCompletedTickets = () => {
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -75,7 +75,7 @@ export default function QueueDisplay({
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col overflow-hidden">
       <h2 className={`${isFullWidth ? 'text-2xl' : 'text-xl'} font-bold mb-4 text-center flex items-center justify-center space-x-2`} style={{ color: textColor }}>
         <Users size={isFullWidth ? 28 : 24} style={{ color: accentColor }} />
-        <span>Estado de la Cola</span>
+        <span>Tickets en Atención</span>
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
@@ -84,7 +84,7 @@ export default function QueueDisplay({
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
             <h3 className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold text-center`} style={{ color: textColor }}>
-              Tickets Atendidos Hoy ({beingServedTickets.length} en atención, {getTodaysCompletedTickets().length} completados)
+              Tickets en Atención
             </h3>
           </div>
           
@@ -130,10 +130,11 @@ export default function QueueDisplay({
                     height: ticketHeight,
                     minHeight: minTicketHeight,
                     maxHeight: '80px',
-                    backgroundColor: isCompleted ? '#10B981' : accentColor, // Green for completed, accent for being served
-                    borderColor: isCompleted ? '#10B981' : accentColor,
+                    // FIXED: Different color for completed tickets - muted gray instead of green
+                    backgroundColor: isCompleted ? '#6B7280' : accentColor, // Gray for completed, accent for being served
+                    borderColor: isCompleted ? '#6B7280' : accentColor,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                    opacity: isCompleted ? 0.8 : 1 // Slightly transparent for completed tickets
+                    opacity: isCompleted ? 0.7 : 1 // More transparent for completed tickets
                   }}
                 >
                   {/* FIXED: Internal highlight effects - NO box resizing, only content animation */}
@@ -149,12 +150,7 @@ export default function QueueDisplay({
                     </>
                   )}
 
-                  {/* NEW: Completed ticket indicator */}
-                  {isCompleted && (
-                    <div className="absolute top-1 right-1 bg-white bg-opacity-20 p-1 rounded-full z-30">
-                      <CheckCircle size={16} className="text-white" />
-                    </div>
-                  )}
+                  {/* REMOVED: Completed ticket indicator - no check icon or completion time */}
                   
                   {/* FIXED: SIMPLIFIED ticket content - ONLY basic info */}
                   <div className={`relative z-20 flex items-center justify-between w-full text-white ${
@@ -176,12 +172,7 @@ export default function QueueDisplay({
                       <div className="text-base font-bold drop-shadow">
                         {employee?.name || 'N/A'}
                       </div>
-                      {/* NEW: Show completion time for completed tickets */}
-                      {isCompleted && ticket.completedAt && (
-                        <div className="text-xs opacity-90 drop-shadow">
-                          {new Date(ticket.completedAt).toLocaleTimeString()}
-                        </div>
-                      )}
+                      {/* REMOVED: Completion time display */}
                     </div>
                     
                     {/* Right side - ONLY Service area */}
