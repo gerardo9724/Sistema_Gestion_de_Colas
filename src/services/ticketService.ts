@@ -46,13 +46,6 @@ const convertFirestoreTicket = (doc: any): Ticket => {
     totalTime: data.totalTime || undefined,
     cancellationReason: data.cancellationReason || undefined,
     cancellationComment: data.cancellationComment || undefined,
-    
-    // NEW: Employee Queue Fields
-    queuedForEmployee: data.queuedForEmployee || undefined,
-    queuedAt: data.queuedAt ? timestampToDate(data.queuedAt) : undefined,
-    derivedFrom: data.derivedFrom || undefined,
-    derivationReason: data.derivationReason || undefined,
-    queuePositionForEmployee: data.queuePositionForEmployee || undefined,
   };
 };
 
@@ -117,13 +110,6 @@ export const ticketService = {
         totalTime: null,
         cancellationReason: null,
         cancellationComment: null,
-        
-        // NEW: Employee Queue Fields
-        queuedForEmployee: null,
-        queuedAt: null,
-        derivedFrom: null,
-        derivationReason: null,
-        queuePositionForEmployee: null,
       };
       
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
@@ -173,24 +159,6 @@ export const ticketService = {
     }
   },
 
-  // NEW: Get tickets queued for a specific employee
-  async getTicketsQueuedForEmployee(employeeId: string): Promise<Ticket[]> {
-    try {
-      const q = query(
-        collection(db, 'tickets'),
-        where('status', '==', 'queued_for_employee'),
-        where('queuedForEmployee', '==', employeeId),
-        orderBy('queuedAt', 'asc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(convertFirestoreTicket);
-    } catch (error) {
-      console.error('Error getting tickets queued for employee:', error);
-      return [];
-    }
-  },
-
   // Subscribe to ticket changes (real-time)
   subscribeToTickets(callback: (tickets: Ticket[]) => void): () => void {
     const q = query(collection(db, 'tickets'), orderBy('createdAt', 'desc'));
@@ -213,58 +181,11 @@ export const ticketService = {
       if (updateData.servedAt) updateData.servedAt = Timestamp.fromDate(updateData.servedAt);
       if (updateData.completedAt) updateData.completedAt = Timestamp.fromDate(updateData.completedAt);
       if (updateData.cancelledAt) updateData.cancelledAt = Timestamp.fromDate(updateData.cancelledAt);
-      if (updateData.queuedAt) updateData.queuedAt = Timestamp.fromDate(updateData.queuedAt);
-      
-      // Convert undefined to null for Firestore
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) {
-          updateData[key] = null;
-        }
-      });
       
       await updateDoc(ticketRef, updateData);
     } catch (error) {
       console.error('Error updating ticket:', error);
       throw new Error('Failed to update ticket');
-    }
-  },
-
-  // NEW: Get ticket by ID
-  async getTicketById(ticketId: string): Promise<Ticket | null> {
-    try {
-      const ticketRef = doc(db, 'tickets', ticketId);
-      const ticketDoc = await ticketRef.get();
-      
-      if (!ticketDoc.exists()) {
-        return null;
-      }
-      
-      return convertFirestoreTicket(ticketDoc);
-    } catch (error) {
-      console.error('Error getting ticket by ID:', error);
-      return null;
-    }
-  },
-
-  // NEW: Get today's tickets
-  async getTodayTickets(): Promise<Ticket[]> {
-    try {
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-      
-      const q = query(
-        collection(db, 'tickets'),
-        where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
-        where('createdAt', '<', Timestamp.fromDate(endOfDay)),
-        orderBy('createdAt', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(convertFirestoreTicket);
-    } catch (error) {
-      console.error('Error getting today tickets:', error);
-      return [];
     }
   }
 };
