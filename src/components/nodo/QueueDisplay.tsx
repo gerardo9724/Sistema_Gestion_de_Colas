@@ -29,15 +29,15 @@ export default function QueueDisplay({
 }: QueueDisplayProps) {
 
   return (
-    <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
+    <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col overflow-hidden">
       <h2 className={`${isFullWidth ? 'text-2xl' : 'text-xl'} font-bold mb-4 text-center flex items-center justify-center space-x-2`} style={{ color: textColor }}>
         <Users size={isFullWidth ? 28 : 24} style={{ color: accentColor }} />
         <span>Estado de la Cola</span>
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {/* Currently Being Served - FIXED: Vertical scrolling layout */}
-        <div className="flex-1 flex flex-col min-h-0">
+        {/* Currently Being Served - FIXED: No scroll, vertical layout, contained animations */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
             <h3 className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold text-center`} style={{ color: textColor }}>
@@ -45,10 +45,10 @@ export default function QueueDisplay({
             </h3>
           </div>
           
-          {/* FIXED: Proper scrollable container with vertical layout */}
-          <div className={`flex-1 overflow-y-auto ${isFullWidth ? 'max-h-[400px]' : 'max-h-[320px]'} pr-2`}>
+          {/* FIXED: No scroll container, fixed height, proper spacing */}
+          <div className="flex-1 flex flex-col justify-start space-y-3 overflow-hidden">
             {beingServedTickets.length > 0 ? (
-              <div className="space-y-3"> {/* FIXED: Vertical layout with proper spacing */}
+              <>
                 {beingServedTickets.slice(0, maxTicketsDisplayed).map((ticket, index) => {
                   const employee = employees.find(emp => emp.id === ticket.servedBy);
                   const isHighlighted = highlightedTicket === ticket.id;
@@ -56,32 +56,42 @@ export default function QueueDisplay({
                   return (
                     <div 
                       key={ticket.id} 
-                      className={`rounded-xl p-4 text-center shadow-lg flex items-center justify-between relative overflow-hidden border-2 ${
+                      className={`rounded-xl p-4 text-center shadow-lg flex items-center justify-between relative border-2 overflow-hidden ${
                         enableAnimations ? 'transition-all duration-1000' : ''
                       } ${
                         isHighlighted 
-                          ? 'bg-gradient-to-r from-red-400 to-red-600 text-white border-yellow-400 shadow-2xl transform scale-105 z-20' 
+                          ? 'bg-gradient-to-r from-red-400 to-red-600 text-white border-yellow-400 transform scale-105 z-10' 
                           : 'bg-gradient-to-r text-white hover:scale-102'
                       }`}
                       style={{
                         minHeight: '90px',
+                        maxHeight: '110px',
                         backgroundColor: isHighlighted ? undefined : accentColor,
                         borderColor: isHighlighted ? '#FBBF24' : accentColor,
+                        // FIXED: Remove external glow effect, keep contained animations only
                         ...(isHighlighted ? { 
-                          boxShadow: '0 0 30px rgba(239, 68, 68, 0.8), 0 0 60px rgba(239, 68, 68, 0.4)',
-                          animation: enableAnimations ? 'pulse 2s infinite' : undefined
-                        } : {})
+                          boxShadow: 'inset 0 0 20px rgba(255, 255, 255, 0.3), 0 4px 20px rgba(239, 68, 68, 0.4)',
+                        } : {
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                        })
                       }}
                     >
-                      {/* ENHANCED: Multiple highlight effects for called tickets - FIXED: Visible within container */}
+                      {/* FIXED: Contained highlight effects - all animations stay within the card */}
                       {isHighlighted && (
                         <>
-                          <div className="absolute inset-0 bg-white bg-opacity-20 animate-ping rounded-xl"></div>
+                          {/* Pulsing background overlay - CONTAINED */}
+                          <div className="absolute inset-1 bg-white bg-opacity-20 rounded-lg animate-pulse"></div>
+                          
+                          {/* Calling badge - POSITIONED INSIDE */}
                           <div className="absolute top-2 left-2 bg-yellow-400 text-red-800 px-3 py-1 rounded-full text-xs font-bold animate-bounce z-30">
                             ¡LLAMANDO!
                           </div>
-                          <div className="absolute inset-0 border-4 border-yellow-400 rounded-xl animate-pulse z-10"></div>
-                          <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-transparent to-yellow-400 opacity-30 animate-pulse rounded-xl"></div>
+                          
+                          {/* Border animation - CONTAINED within card */}
+                          <div className="absolute inset-1 border-2 border-yellow-400 rounded-lg animate-pulse z-10"></div>
+                          
+                          {/* Gradient overlay - CONTAINED */}
+                          <div className="absolute inset-1 bg-gradient-to-r from-yellow-400 via-transparent to-yellow-400 opacity-20 animate-pulse rounded-lg"></div>
                         </>
                       )}
                       
@@ -104,7 +114,7 @@ export default function QueueDisplay({
                         </div>
                       </div>
                       
-                      {/* Right side - Service type */}
+                      {/* Right side - Service type and time */}
                       <div className="flex-shrink-0 text-right relative z-20">
                         <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} font-semibold opacity-90`}>
                           {ticket.serviceType.toUpperCase()}
@@ -119,7 +129,7 @@ export default function QueueDisplay({
                   );
                 })}
                 
-                {/* Fill empty slots if less than max - VERTICAL LAYOUT */}
+                {/* Fill remaining space with empty slots if needed */}
                 {Array.from({ 
                   length: Math.max(0, Math.min(3, maxTicketsDisplayed - beingServedTickets.length))
                 }).map((_, index) => (
@@ -128,7 +138,10 @@ export default function QueueDisplay({
                     className={`bg-gray-100 bg-opacity-70 rounded-xl p-4 text-center flex items-center justify-center border-2 border-dashed border-gray-300 ${
                       enableAnimations ? 'hover:bg-gray-200 transition-colors' : ''
                     }`}
-                    style={{ minHeight: '90px' }}
+                    style={{ 
+                      minHeight: '90px',
+                      maxHeight: '110px'
+                    }}
                   >
                     <div className="text-center">
                       <div className={`${isFullWidth ? 'text-xl' : 'text-lg'} font-bold mb-1 text-gray-400`}>---</div>
@@ -136,9 +149,9 @@ export default function QueueDisplay({
                     </div>
                   </div>
                 ))}
-              </div>
+              </>
             ) : (
-              <div className="text-center text-gray-400 py-8 flex flex-col items-center justify-center h-full">
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
                 <div className={`${isFullWidth ? 'text-6xl' : 'text-4xl'} font-bold mb-3 opacity-30`}>---</div>
                 <p className={`${isFullWidth ? 'text-xl' : 'text-lg'} font-semibold mb-2`}>No hay tickets siendo atendidos</p>
                 <p className={`${isFullWidth ? 'text-base' : 'text-sm'} opacity-75`}>Esperando actividad...</p>
@@ -147,7 +160,7 @@ export default function QueueDisplay({
           </div>
         </div>
 
-        {/* Next in Queue - COMPACT */}
+        {/* Next in Queue - COMPACT and FIXED */}
         {showQueueInfo && (
           <div className="flex-shrink-0">
             <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-2 border border-gray-200 shadow-sm">

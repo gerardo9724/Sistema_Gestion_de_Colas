@@ -22,7 +22,7 @@ export default function NodoUser() {
         autoRotationInterval: state.nodeConfiguration.autoRotationInterval,
         showQueueInfo: state.nodeConfiguration.showQueueInfo,
         showCompanyLogo: state.nodeConfiguration.showCompanyLogo,
-        showCompanyName: state.nodeConfiguration.showCompanyName ?? true, // NEW: Company name visibility
+        showCompanyName: state.nodeConfiguration.showCompanyName ?? true,
         maxTicketsDisplayed: state.nodeConfiguration.maxTicketsDisplayed,
         showDateTime: state.nodeConfiguration.showDateTime,
         showConnectionStatus: state.nodeConfiguration.showConnectionStatus,
@@ -64,7 +64,7 @@ export default function NodoUser() {
         autoRotationInterval: 5000,
         showQueueInfo: true,
         showCompanyLogo: true,
-        showCompanyName: true, // NEW: Default to show company name
+        showCompanyName: true,
         maxTicketsDisplayed: 6,
         showDateTime: true,
         showConnectionStatus: true,
@@ -119,17 +119,18 @@ export default function NodoUser() {
     dispatch({ type: 'SET_CURRENT_USER', payload: null });
   };
 
-  // Get tickets being served - sorted by most recent first, limited by configuration
+  // FIXED: Get tickets being served - sorted by LAST CALLED FIRST (most recent servedAt time)
   const beingServedTickets = state.tickets
     .filter(ticket => ticket.status === 'being_served')
     .sort((a, b) => {
-      // Highlighted ticket goes first
+      // CRITICAL: Highlighted ticket always goes first
       if (highlightedTicket === a.id && highlightedTicket !== b.id) return -1;
       if (highlightedTicket === b.id && highlightedTicket !== a.id) return 1;
-      // Then by served time (most recent first)
+      
+      // FIXED: Sort by served time - MOST RECENT FIRST (last called first)
       const aTime = a.servedAt ? new Date(a.servedAt).getTime() : 0;
       const bTime = b.servedAt ? new Date(b.servedAt).getTime() : 0;
-      return bTime - aTime;
+      return bTime - aTime; // Most recent (last called) first
     })
     .slice(0, nodeConfig.maxTicketsDisplayed);
 
@@ -168,7 +169,7 @@ export default function NodoUser() {
           showDateTime={nodeConfig.showDateTime}
           showConnectionStatus={nodeConfig.showConnectionStatus}
           showCompanyLogo={nodeConfig.showCompanyLogo}
-          showCompanyName={nodeConfig.showCompanyName} // NEW: Pass company name visibility setting
+          showCompanyName={nodeConfig.showCompanyName}
           headerColor={nodeConfig.headerColor}
           companyName={companyName}
           companyLogo={companyLogo}
