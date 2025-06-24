@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import type { CarouselImage } from '../../types';
 
 interface CarouselDisplayProps {
@@ -25,32 +25,34 @@ export default function CarouselDisplay({
   scrollingSpeed
 }: CarouselDisplayProps) {
   
-  // FIXED: Calculate animation duration for complete text display
-  // Longer duration ensures full text is visible before restarting
-  const baseSpeed = 20; // Base speed in seconds
-  const speedMultiplier = (11 - scrollingSpeed) / 10; // Convert 1-10 scale to 0.1-1.0
-  const textLength = carouselTitle.length;
-  const lengthFactor = Math.max(1, textLength / 20); // Adjust for text length
-  const animationDuration = baseSpeed * speedMultiplier * lengthFactor;
-  
-  // IMPROVED: Scrolling text component with proper cycle completion
-  const ScrollingTitle = ({ text }: { text: string }) => {
+  // CRITICAL: Memoize the scrolling title component to prevent re-renders
+  const ScrollingTitle = useMemo(() => {
     if (!enableScrollingText) {
-      return <span>{text}</span>;
+      return <span>{carouselTitle}</span>;
     }
+
+    // Calculate animation duration based on text length and speed
+    const baseSpeed = 20;
+    const speedMultiplier = (11 - scrollingSpeed) / 10;
+    const textLength = carouselTitle.length;
+    const lengthFactor = Math.max(1, textLength / 20);
+    const animationDuration = baseSpeed * speedMultiplier * lengthFactor;
+    
+    // Generate unique animation name to avoid conflicts
+    const animationName = `scroll-text-${Math.random().toString(36).substr(2, 9)}`;
 
     return (
       <div className="overflow-hidden whitespace-nowrap relative w-full">
         <div 
           className="inline-block"
           style={{
-            animation: `scroll-complete ${animationDuration}s linear infinite`,
+            animation: `${animationName} ${animationDuration}s linear infinite`,
           }}
         >
-          {text}
+          {carouselTitle}
         </div>
         <style jsx>{`
-          @keyframes scroll-complete {
+          @keyframes ${animationName} {
             0% {
               transform: translateX(100%);
             }
@@ -64,15 +66,24 @@ export default function CarouselDisplay({
         `}</style>
       </div>
     );
-  };
-  
+  }, [carouselTitle, enableScrollingText, scrollingSpeed]); // Only re-create when these specific props change
+
+  // Memoize the current image to prevent unnecessary re-renders
+  const currentImage = useMemo(() => {
+    return images[currentImageIndex];
+  }, [images, currentImageIndex]);
+
+  // Memoize the error handler to prevent re-creation on every render
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y3ZjdmNyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZW4gbm8gZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=';
+  }, []);
+
   if (images.length === 0) {
     return (
       <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
-        {/* Title takes full width for scrolling validation */}
         <div className="w-full mb-3">
           <h2 className="text-xl font-bold text-center w-full" style={{ color: textColor }}>
-            <ScrollingTitle text={carouselTitle} />
+            {ScrollingTitle}
           </h2>
         </div>
         
@@ -87,18 +98,16 @@ export default function CarouselDisplay({
     );
   }
 
-  const currentImage = images[currentImageIndex];
-
   return (
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
-      {/* OPTIMIZED: Reduced title container height for more image space */}
+      {/* STABLE: Title container with memoized scrolling component */}
       <div className="w-full mb-2">
         <h2 className="text-lg font-bold text-center w-full" style={{ color: textColor }}>
-          <ScrollingTitle text={carouselTitle} />
+          {ScrollingTitle}
         </h2>
       </div>
       
-      {/* ENHANCED: Image container now uses maximum available space with better proportions */}
+      {/* Image container */}
       <div className="flex-1 flex items-center justify-center min-h-0">
         <div className="relative w-[95%] h-[98%] rounded-2xl overflow-hidden shadow-2xl">
           <img
@@ -108,17 +117,15 @@ export default function CarouselDisplay({
               enableAnimations ? 'transition-all duration-1000 transform hover:scale-105' : ''
             }`}
             style={{
-              objectFit: 'cover', // Ensures aspect ratio is preserved while filling container
+              objectFit: 'cover',
             }}
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y3ZjdmNyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZW4gbm8gZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=';
-            }}
+            onError={handleImageError}
           />
           
-          {/* Overlay with gradient - OPTIMIZED for better image visibility */}
+          {/* Overlay with gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-50"></div>
           
-          {/* Image name overlay - REPOSITIONED for better space usage */}
+          {/* Image name overlay */}
           {showImageDescriptions && (
             <div className="absolute bottom-4 left-4 right-4">
               <h3 className="text-xl font-bold text-white drop-shadow-2xl">
@@ -132,7 +139,7 @@ export default function CarouselDisplay({
             </div>
           )}
           
-          {/* Image indicators - REPOSITIONED to avoid overlap */}
+          {/* Image indicators */}
           {showImageIndicators && (
             <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1.5">
               {images.map((_, index) => (
@@ -150,7 +157,7 @@ export default function CarouselDisplay({
             </div>
           )}
 
-          {/* Auto-rotation indicator - REPOSITIONED and RESIZED */}
+          {/* Auto-rotation indicator */}
           <div className="absolute top-2 right-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded-full text-xs font-medium backdrop-blur-sm">
             {currentImageIndex + 1} / {images.length}
           </div>
