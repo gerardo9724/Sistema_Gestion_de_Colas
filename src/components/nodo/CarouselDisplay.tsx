@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import type { CarouselImage } from '../../types';
 
 interface CarouselDisplayProps {
@@ -29,6 +29,32 @@ export default function CarouselDisplay({
   // Speed 1 = 15s (very slow), Speed 10 = 3s (fast)
   const animationDuration = Math.max(3, 18 - (scrollingSpeed * 1.5));
   
+  // State to control animation restart
+  const [animationKey, setAnimationKey] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const animationRef = useRef<HTMLDivElement>(null);
+  
+  // Effect to handle animation lifecycle
+  useEffect(() => {
+    if (!enableScrollingText) return;
+    
+    // Start animation
+    setIsAnimating(true);
+    
+    // Set timeout to restart animation after it completes
+    const timeout = setTimeout(() => {
+      setAnimationKey(prev => prev + 1);
+      setIsAnimating(false);
+      
+      // Small delay before restarting
+      setTimeout(() => {
+        setIsAnimating(true);
+      }, 100);
+    }, animationDuration * 1000);
+    
+    return () => clearTimeout(timeout);
+  }, [enableScrollingText, animationDuration, animationKey, carouselTitle]);
+  
   // Single pass scrolling text component (right to left, no loop)
   const ScrollingTitle = ({ text }: { text: string }) => {
     if (!enableScrollingText) {
@@ -38,17 +64,26 @@ export default function CarouselDisplay({
     return (
       <div className="overflow-hidden whitespace-nowrap relative w-full">
         <div 
+          ref={animationRef}
+          key={animationKey} // Force re-render when animation restarts
           className="inline-block"
           style={{
-            animation: `singlePassScroll ${animationDuration}s linear forwards`,
+            animation: isAnimating ? `scrollRightToLeft ${animationDuration}s linear forwards` : 'none',
+            transform: isAnimating ? 'translateX(100%)' : 'translateX(100%)',
           }}
         >
           {text}
         </div>
-        
-        {/* Single pass CSS keyframes - starts at 100% (off-screen right) and ends at -100% (off-screen left) */}
-        <style jsx>{`
-          @keyframes singlePassScroll {
+      </div>
+    );
+  };
+  
+  if (images.length === 0) {
+    return (
+      <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
+        {/* Global CSS for scrolling animation - defined once */}
+        <style>{`
+          @keyframes scrollRightToLeft {
             0% {
               transform: translateX(100%);
             }
@@ -57,13 +92,7 @@ export default function CarouselDisplay({
             }
           }
         `}</style>
-      </div>
-    );
-  };
-  
-  if (images.length === 0) {
-    return (
-      <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
+        
         {/* Title with single pass scrolling */}
         <div className="w-full mb-3">
           <h2 className="text-xl font-bold text-center w-full" style={{ color: textColor }}>
@@ -86,6 +115,18 @@ export default function CarouselDisplay({
 
   return (
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
+      {/* Global CSS for scrolling animation - defined once */}
+      <style>{`
+        @keyframes scrollRightToLeft {
+          0% {
+            transform: translateX(100%);
+          }
+          100% {
+            transform: translateX(-100%);
+          }
+        }
+      `}</style>
+      
       {/* Title container with single pass scrolling */}
       <div className="w-full mb-2">
         <h2 className="text-lg font-bold text-center w-full" style={{ color: textColor }}>
