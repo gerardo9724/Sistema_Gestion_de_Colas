@@ -637,8 +637,8 @@ export default function EmpleadoUser() {
                 <p className="text-yellow-800 text-sm mb-2">
                   <strong>Próximo ticket:</strong> 
                   {queuedTickets.length > 0 
-                    ? ` #${queuedTickets[0].number.toString().padStart(3, '0'))} (Tu cola personal)`
-                    : ` #${waitingTickets[0].number.toString().padStart(3, '0'))} (Cola general)`
+                    ? ` #${queuedTickets[0].number.toString().padStart(3, '0')} (Tu cola personal)`
+                    : ` #${waitingTickets[0].number.toString().padStart(3, '0')} (Cola general)`
                   }
                 </p>
                 <p className="text-yellow-700 text-xs">
@@ -1019,7 +1019,7 @@ export default function EmpleadoUser() {
                             {queuedTickets.length} ticket(s) en cola
                           </span>
                           <div className="text-xs text-blue-600 mt-1">
-                            Próximo: #{queuedTickets[0].number.toString().padStart(3, '0'))} - {queuedTickets[0].serviceType.toUpperCase()}
+                            Próximo: #{queuedTickets[0].number.toString().padStart(3, '0')} - {queuedTickets[0].serviceType.toUpperCase()}
                           </div>
                         </div>
                       ) : (
