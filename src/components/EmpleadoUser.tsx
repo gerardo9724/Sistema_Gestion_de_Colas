@@ -39,6 +39,9 @@ export default function EmpleadoUser() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // CRITICAL: Track the original service start time to prevent timer resets on recalls
+  const [originalServiceStartTime, setOriginalServiceStartTime] = useState<Date | null>(null);
 
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
@@ -52,7 +55,7 @@ export default function EmpleadoUser() {
     ticket.status === 'being_served' && ticket.servedBy === currentEmployee?.id
   );
 
-  // FIXED: Complete state restoration when employee has active ticket
+  // FIXED: Complete state restoration when employee has active ticket - PREVENT TIMER RESET ON RECALLS
   useEffect(() => {
     console.log('🔄 Employee state restoration check...');
     console.log('Current Employee:', currentEmployee?.name);
@@ -73,28 +76,53 @@ export default function EmpleadoUser() {
         
         if (activeTicket.servedAt) {
           const servedTime = new Date(activeTicket.servedAt);
-          setServiceStartTime(servedTime);
-          setIsTimerRunning(true);
           
-          // Calculate elapsed time from when service started
-          const elapsed = Math.floor((new Date().getTime() - servedTime.getTime()) / 1000);
-          setElapsedTime(elapsed);
-          
-          console.log('🔄 Employee state restored successfully:', {
-            serviceStartTime: servedTime,
-            elapsedTime: elapsed,
-            isTimerRunning: true
-          });
+          // CRITICAL: Only update timer if we don't have an original start time yet
+          // This prevents timer resets when servedAt is updated for recalls
+          if (!originalServiceStartTime) {
+            console.log('🕐 Setting ORIGINAL service start time (first time):', servedTime);
+            setOriginalServiceStartTime(servedTime);
+            setServiceStartTime(servedTime);
+            setIsTimerRunning(true);
+            
+            // Calculate elapsed time from when service started
+            const elapsed = Math.floor((new Date().getTime() - servedTime.getTime()) / 1000);
+            setElapsedTime(elapsed);
+            
+            console.log('🔄 Employee state restored successfully:', {
+              serviceStartTime: servedTime,
+              elapsedTime: elapsed,
+              isTimerRunning: true
+            });
+          } else {
+            // FIXED: If we already have an original start time, don't reset the timer
+            // This happens when servedAt is updated for recalls
+            console.log('⏰ RECALL DETECTED - Keeping original timer:', {
+              originalStartTime: originalServiceStartTime,
+              newServedAt: servedTime,
+              timerWillNotReset: true
+            });
+            
+            // Keep using the original start time for timer calculation
+            const elapsed = Math.floor((new Date().getTime() - originalServiceStartTime.getTime()) / 1000);
+            setElapsedTime(elapsed);
+            
+            // Ensure timer is still running
+            if (!isTimerRunning) {
+              setIsTimerRunning(true);
+            }
+          }
         }
       } else {
         console.log('ℹ️ No active ticket found for employee');
         // Reset timer state if no active ticket
         setServiceStartTime(null);
+        setOriginalServiceStartTime(null); // CRITICAL: Reset original time too
         setElapsedTime(0);
         setIsTimerRunning(false);
       }
     }
-  }, [currentEmployee?.id, state.tickets]); // Re-run when employee or tickets change
+  }, [currentEmployee?.id, state.tickets, originalServiceStartTime, isTimerRunning]); // Added originalServiceStartTime to dependencies
 
   // FIXED: Update employee's currentTicketId when ticket state changes
   useEffect(() => {
@@ -121,16 +149,17 @@ export default function EmpleadoUser() {
     }
   }, [currentEmployee, currentTicket]);
 
-  // Timer update effect
+  // FIXED: Timer update effect - use original service start time
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isTimerRunning && serviceStartTime) {
+    if (isTimerRunning && originalServiceStartTime) {
       interval = setInterval(() => {
-        setElapsedTime(Math.floor((new Date().getTime() - serviceStartTime.getTime()) / 1000));
+        // CRITICAL: Always use the original service start time for timer calculation
+        setElapsedTime(Math.floor((new Date().getTime() - originalServiceStartTime.getTime()) / 1000));
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isTimerRunning, serviceStartTime]);
+  }, [isTimerRunning, originalServiceStartTime]); // Use originalServiceStartTime instead of serviceStartTime
 
   const handleLogout = () => {
     dispatch({ type: 'LOGOUT' });
@@ -197,6 +226,8 @@ export default function EmpleadoUser() {
         isPaused: false
       });
 
+      // CRITICAL: Set both original and current service start time for new tickets
+      setOriginalServiceStartTime(now);
       setServiceStartTime(now);
       setElapsedTime(0);
       setIsTimerRunning(true);
@@ -207,9 +238,9 @@ export default function EmpleadoUser() {
   };
 
   const handleCompleteTicket = async (ticketId: string, callNext: boolean = false) => {
-    if (!currentEmployee || !serviceStartTime) return;
+    if (!currentEmployee || !originalServiceStartTime) return; // Use originalServiceStartTime
 
-    const serviceTime = Math.floor((new Date().getTime() - serviceStartTime.getTime()) / 1000);
+    const serviceTime = Math.floor((new Date().getTime() - originalServiceStartTime.getTime()) / 1000); // Use originalServiceStartTime
     const ticket = state.tickets.find(t => t.id === ticketId);
     if (!ticket) return;
 
@@ -230,6 +261,8 @@ export default function EmpleadoUser() {
         isPaused: !callNext
       });
       
+      // CRITICAL: Reset both original and current service start time
+      setOriginalServiceStartTime(null);
       setServiceStartTime(null);
       setElapsedTime(0);
       setIsTimerRunning(false);
@@ -249,7 +282,7 @@ export default function EmpleadoUser() {
     }
   };
 
-  // FIXED: Handle ticket recall (call client again in the node) - NO POPUP
+  // FIXED: Handle ticket recall (call client again in the node) - NO TIMER RESET
   const handleRecallTicket = async () => {
     if (!currentEmployee || !currentTicket) {
       console.warn('No hay ticket en atención para volver a llamar');
@@ -258,14 +291,15 @@ export default function EmpleadoUser() {
 
     try {
       console.log('🔊 Recalling ticket:', currentTicket.number);
+      console.log('⏰ IMPORTANT: Timer will NOT reset - using original start time:', originalServiceStartTime);
       
       // FIXED: Update the ticket's servedAt time to trigger a new announcement
-      // This will cause the AudioManager to detect it as a "newly served" ticket
+      // The timer logic now prevents resets by using originalServiceStartTime
       await ticketService.updateTicket(currentTicket.id, {
-        servedAt: new Date() // This timestamp change triggers the audio system
+        servedAt: new Date() // This timestamp change triggers the audio system but won't reset timer
       });
 
-      console.log('✅ Ticket recall triggered successfully');
+      console.log('✅ Ticket recall triggered successfully - Timer preserved');
     } catch (error) {
       console.error('❌ Error recalling ticket:', error);
     }
@@ -317,6 +351,8 @@ export default function EmpleadoUser() {
         isPaused: true
       });
 
+      // CRITICAL: Reset both original and current service start time
+      setOriginalServiceStartTime(null);
       setServiceStartTime(null);
       setElapsedTime(0);
       setIsTimerRunning(false);
@@ -361,6 +397,8 @@ export default function EmpleadoUser() {
         isPaused: true
       });
 
+      // CRITICAL: Reset both original and current service start time
+      setOriginalServiceStartTime(null);
       setServiceStartTime(null);
       setElapsedTime(0);
       setIsTimerRunning(false);
@@ -497,7 +535,7 @@ export default function EmpleadoUser() {
                 </div>
               </div>
               
-              {/* FIXED: Added Recall Button - NO POPUP */}
+              {/* FIXED: Added Recall Button - NO TIMER RESET */}
               <div className="mb-4">
                 <button
                   onClick={handleRecallTicket}
@@ -507,7 +545,7 @@ export default function EmpleadoUser() {
                   <span>Volver a Llamar Cliente</span>
                 </button>
                 <p className="text-xs text-gray-500 mt-1 text-center">
-                  El anuncio se reproducirá nuevamente en el módulo nodo
+                  ⏰ El cronómetro NO se reiniciará - El anuncio se reproducirá nuevamente en el módulo nodo
                 </p>
               </div>
               
@@ -704,7 +742,7 @@ export default function EmpleadoUser() {
                             #{currentTicket.number.toString().padStart(3, '0')} - {currentTicket.serviceType.toUpperCase()}
                           </span>
                           <span className="text-xs text-blue-600">
-                            {serviceStartTime ? `Tiempo: ${formatTime(elapsedTime)}` : 'Iniciando...'}
+                            {originalServiceStartTime ? `Tiempo: ${formatTime(elapsedTime)}` : 'Iniciando...'}
                           </span>
                         </div>
                       ) : (
@@ -762,6 +800,7 @@ export default function EmpleadoUser() {
                 <li>• Las estadísticas se actualizan automáticamente</li>
                 <li>• <strong>El estado del empleado se mantiene al cerrar y abrir el sistema</strong></li>
                 <li>• <strong>Si tienes un ticket en atención, se restaurará automáticamente</strong></li>
+                <li>• <strong>⏰ El cronómetro NO se reinicia al usar "Volver a llamar"</strong></li>
               </ul>
             </div>
           </div>
@@ -815,7 +854,7 @@ export default function EmpleadoUser() {
                     Atendiendo: #{currentTicket.number.toString().padStart(3, '0')}
                   </div>
                   <div className="text-green-600 text-xs">
-                    {serviceStartTime ? formatTime(elapsedTime) : 'Iniciando...'}
+                    {originalServiceStartTime ? formatTime(elapsedTime) : 'Iniciando...'}
                   </div>
                 </div>
               )}
