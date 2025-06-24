@@ -52,11 +52,11 @@ export const derivationWorkflowService = {
       // 3. Determine assignment type
       if (targetEmployee.currentTicketId) {
         // Target employee is busy - add to personal queue
-        await this._assignToPersonalQueue(ticket, targetEmployee, sourceEmployee, options);
+        await this.assignToPersonalQueue(ticket, targetEmployee, sourceEmployee, options);
         console.log('📋 Assigned to personal queue');
       } else {
         // Target employee is available - immediate assignment
-        await this._assignImmediately(ticket, targetEmployee, sourceEmployee, options);
+        await this.assignImmediately(ticket, targetEmployee, sourceEmployee, options);
         console.log('⚡ Assigned immediately');
       }
 
@@ -152,8 +152,8 @@ export const derivationWorkflowService = {
     }
   },
 
-  // Assign ticket to personal queue (internal method)
-  async _assignToPersonalQueue(
+  // Assign ticket to personal queue
+  private async assignToPersonalQueue(
     ticket: Ticket,
     targetEmployee: Employee,
     sourceEmployee: Employee,
@@ -177,8 +177,8 @@ export const derivationWorkflowService = {
     console.log(`📋 Ticket ${ticket.number} added to ${targetEmployee.name}'s personal queue`);
   },
 
-  // Assign ticket immediately (internal method)
-  async _assignImmediately(
+  // Assign ticket immediately
+  private async assignImmediately(
     ticket: Ticket,
     targetEmployee: Employee,
     sourceEmployee: Employee,
