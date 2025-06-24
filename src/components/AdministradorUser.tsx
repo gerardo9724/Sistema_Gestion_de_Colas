@@ -7,6 +7,7 @@ import ServicesManagement from './admin/ServicesManagement';
 import NodeConfiguration from './admin/NodeConfiguration';
 import ComputerProfilesManagement from './admin/ComputerProfilesManagement';
 import SystemConfigurations from './admin/SystemConfigurations';
+import EmployeeManagement from './admin/EmployeeManagement'; // NEW: Real-time employee management
 
 export default function AdministradorUser() {
   const { state } = useApp();
@@ -16,6 +17,8 @@ export default function AdministradorUser() {
     switch (activeSection) {
       case 'employees':
         return <EmployeesManagement />;
+      case 'employee-management': // NEW: Real-time employee management
+        return <EmployeeManagement />;
       case 'users':
         return <UsersManagement />;
       case 'services':
