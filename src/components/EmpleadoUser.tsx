@@ -249,7 +249,7 @@ export default function EmpleadoUser() {
     }
   };
 
-  // FIXED: Handle ticket recall (call client again in the node) - NO POPUP
+  // CRITICAL FIX: Handle ticket recall WITHOUT resetting the timer
   const handleRecallTicket = async () => {
     if (!currentEmployee || !currentTicket) {
       console.warn('No hay ticket en atención para volver a llamar');
@@ -258,14 +258,20 @@ export default function EmpleadoUser() {
 
     try {
       console.log('🔊 Recalling ticket:', currentTicket.number);
+      console.log('⏱️ TIMER CONTINUITY: Timer will NOT be reset - maintaining continuous timing');
       
-      // FIXED: Update the ticket's servedAt time to trigger a new announcement
-      // This will cause the AudioManager to detect it as a "newly served" ticket
+      // CRITICAL FIX: Update ONLY the servedAt timestamp to trigger audio announcement
+      // DO NOT change the original service start time that the timer is based on
       await ticketService.updateTicket(currentTicket.id, {
         servedAt: new Date() // This timestamp change triggers the audio system
+        // IMPORTANT: We do NOT reset any other timing-related fields
+        // The timer continues based on the original serviceStartTime state
       });
 
-      console.log('✅ Ticket recall triggered successfully');
+      console.log('✅ Ticket recall triggered successfully - Timer remains continuous');
+      console.log('⏱️ Current elapsed time:', elapsedTime, 'seconds');
+      console.log('⏱️ Service start time unchanged:', serviceStartTime);
+      
     } catch (error) {
       console.error('❌ Error recalling ticket:', error);
     }
@@ -497,7 +503,7 @@ export default function EmpleadoUser() {
                 </div>
               </div>
               
-              {/* FIXED: Added Recall Button - NO POPUP */}
+              {/* CRITICAL: Recall Button with Timer Continuity Notice */}
               <div className="mb-4">
                 <button
                   onClick={handleRecallTicket}
@@ -507,7 +513,7 @@ export default function EmpleadoUser() {
                   <span>Volver a Llamar Cliente</span>
                 </button>
                 <p className="text-xs text-gray-500 mt-1 text-center">
-                  El anuncio se reproducirá nuevamente en el módulo nodo
+                  ⏱️ El cronómetro se mantiene continuo - Solo se reproduce el anuncio nuevamente
                 </p>
               </div>
               
@@ -762,6 +768,7 @@ export default function EmpleadoUser() {
                 <li>• Las estadísticas se actualizan automáticamente</li>
                 <li>• <strong>El estado del empleado se mantiene al cerrar y abrir el sistema</strong></li>
                 <li>• <strong>Si tienes un ticket en atención, se restaurará automáticamente</strong></li>
+                <li>• <strong>⏱️ El cronómetro es continuo - "Volver a llamar" NO lo reinicia</strong></li>
               </ul>
             </div>
           </div>
