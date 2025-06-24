@@ -27,43 +27,55 @@ export default function AudioManager({
   highlightDuration
 }: AudioManagerProps) {
 
-  // CRITICAL: Monitor for new tickets being served - SINGLE CALL ONLY
+  // FIXED: Monitor for ticket calls - ALLOW MULTIPLE CALLS FOR SAME TICKET
   useEffect(() => {
     if (!audioEnabled) return;
 
     const beingServedTickets = tickets.filter(t => t.status === 'being_served');
     
-    // CRITICAL: Find newly served tickets that haven't been announced yet
-    const newlyServedTicket = beingServedTickets.find(ticket => {
-      // FIXED: Only announce if this ticket hasn't been announced before AND has a recent servedAt time
-      return ticket.id !== lastAnnouncedTicket && 
-             ticket.servedAt && 
-             new Date().getTime() - new Date(ticket.servedAt).getTime() < 5000; // Within last 5 seconds
+    // CRITICAL FIX: Find tickets with updated servedAt time (including recalls)
+    const ticketToAnnounce = beingServedTickets.find(ticket => {
+      if (!ticket.servedAt) return false;
+      
+      // FIXED: Check if servedAt was updated in the last 3 seconds (allows for recalls)
+      const timeSinceServed = new Date().getTime() - new Date(ticket.servedAt).getTime();
+      const isRecentlyUpdated = timeSinceServed < 3000; // 3 seconds window
+      
+      console.log('🔍 Checking ticket for announcement:', {
+        ticketId: ticket.id,
+        ticketNumber: ticket.number,
+        servedAt: ticket.servedAt,
+        timeSinceServed,
+        isRecentlyUpdated,
+        lastAnnounced: lastAnnouncedTicket
+      });
+      
+      return isRecentlyUpdated;
     });
 
-    if (newlyServedTicket) {
-      const employee = employees.find(emp => emp.id === newlyServedTicket.servedBy);
+    if (ticketToAnnounce) {
+      const employee = employees.find(emp => emp.id === ticketToAnnounce.servedBy);
       
       if (employee) {
-        console.log('🔊 NEW TICKET CALL DETECTED - SINGLE ANNOUNCEMENT:', {
-          ticketNumber: newlyServedTicket.number,
+        console.log('🔊 TICKET CALL DETECTED - ANNOUNCEMENT TRIGGERED:', {
+          ticketNumber: ticketToAnnounce.number,
           employeeName: employee.name,
-          lastAnnounced: lastAnnouncedTicket,
-          currentTicket: newlyServedTicket.id
+          servedAt: ticketToAnnounce.servedAt,
+          isRecall: ticketToAnnounce.id === lastAnnouncedTicket ? 'YES - RECALL' : 'NO - NEW CALL'
         });
 
-        // CRITICAL: Mark this ticket as announced IMMEDIATELY to prevent duplicate calls
-        onTicketAnnounced(newlyServedTicket.id);
+        // FIXED: Always update the announced ticket ID (allows for tracking but doesn't prevent recalls)
+        onTicketAnnounced(ticketToAnnounce.id);
         
         // Highlight the ticket IMMEDIATELY
-        onTicketHighlighted(newlyServedTicket.id);
+        onTicketHighlighted(ticketToAnnounce.id);
         
         // Play notification sound
         playNotificationSound();
         
-        // SINGLE announcement after 800ms - NO DUPLICATES
+        // Announce after 800ms
         setTimeout(() => {
-          announceTicket(newlyServedTicket.number, employee.name);
+          announceTicket(ticketToAnnounce.number, employee.name);
         }, 800);
         
         // Remove highlight after configured duration
@@ -172,7 +184,7 @@ export default function AudioManager({
           utterance.pitch = 0.9;
           utterance.volume = audioVolume;
           
-          console.log('🔊 PLAYING SINGLE AUDIO ANNOUNCEMENT:', text);
+          console.log('🔊 PLAYING AUDIO ANNOUNCEMENT:', text);
           speechSynthesis.speak(utterance);
         };
 
