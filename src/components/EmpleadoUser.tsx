@@ -109,9 +109,12 @@ export default function EmpleadoUser() {
     dispatch({ type: 'LOGOUT' });
   };
 
-  // FIXED: Improved toggle pause function with auto-assignment
+  // FIXED: Simplified and improved toggle pause function
   const handleTogglePause = async () => {
-    if (!currentEmployee) return;
+    if (!currentEmployee) {
+      console.error('❌ No current employee found');
+      return;
+    }
 
     const currentTicket = state.tickets.find(t => 
       t.status === 'being_served' && t.servedBy === currentEmployee.id
@@ -129,47 +132,64 @@ export default function EmpleadoUser() {
       
       console.log('🔄 Toggling pause state:', {
         employeeId: currentEmployee.id,
+        employeeName: currentEmployee.name,
         currentPaused: currentEmployee.isPaused,
-        newPaused: newPausedState
+        newPaused: newPausedState,
+        queueStats
       });
 
-      // Update employee pause state
+      // STEP 1: Update employee pause state first
       await employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
         isPaused: newPausedState
       });
 
-      // CRITICAL: If resuming (unpausing), try to auto-assign next ticket
+      console.log('✅ Employee pause state updated successfully');
+
+      // STEP 2: If resuming (unpausing), try to auto-assign next ticket
       if (currentEmployee.isPaused && !newPausedState) {
-        console.log('▶️ Employee resuming - attempting auto-assignment...');
+        console.log('▶️ Employee resuming - checking for available tickets...');
         
-        try {
-          const assignedTicket = await autoAssignNextTicket(currentEmployee.id);
+        // Check if there are tickets available
+        if (queueStats.totalWaitingCount > 0) {
+          console.log('📋 Tickets available, attempting auto-assignment...');
           
-          if (assignedTicket) {
-            console.log('✅ Auto-assigned ticket:', assignedTicket.number);
+          try {
+            // Use a small delay to ensure the employee state is updated in Firebase
+            setTimeout(async () => {
+              try {
+                const assignedTicket = await autoAssignNextTicket(currentEmployee.id);
+                
+                if (assignedTicket) {
+                  console.log('✅ Auto-assigned ticket:', assignedTicket.number);
+                  
+                  // Set up timer for the new ticket
+                  setServiceStartTime(new Date());
+                  setElapsedTime(0);
+                  setIsTimerRunning(true);
+                  
+                  // Show success message
+                  alert(`Ticket #${assignedTicket.number.toString().padStart(3, '0')} asignado automáticamente`);
+                } else {
+                  console.log('ℹ️ No tickets were auto-assigned (might have been taken by another employee)');
+                }
+              } catch (autoAssignError) {
+                console.error('❌ Error in delayed auto-assignment:', autoAssignError);
+              }
+            }, 1000); // 1 second delay
             
-            // Set up timer for the new ticket
-            setServiceStartTime(new Date());
-            setElapsedTime(0);
-            setIsTimerRunning(true);
-            
-            // Show success message
-            setTimeout(() => {
-              alert(`Ticket #${assignedTicket.number.toString().padStart(3, '0')} asignado automáticamente`);
-            }, 500);
-          } else {
-            console.log('ℹ️ No tickets available for auto-assignment');
+          } catch (autoAssignError) {
+            console.error('❌ Error in auto-assignment:', autoAssignError);
+            // Don't show error to user, just log it
           }
-        } catch (autoAssignError) {
-          console.error('❌ Error in auto-assignment:', autoAssignError);
-          // Don't show error to user, just log it
+        } else {
+          console.log('ℹ️ No tickets available for auto-assignment');
         }
       }
       
     } catch (error) {
       console.error('❌ Error toggling pause:', error);
-      alert('Error al cambiar estado de pausa');
+      alert('Error al cambiar estado de pausa: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     } finally {
       setIsLoading(false);
     }
