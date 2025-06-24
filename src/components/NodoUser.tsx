@@ -43,6 +43,10 @@ export default function NodoUser() {
         textColor: state.nodeConfiguration.textColor,
         accentColor: state.nodeConfiguration.accentColor,
         
+        // NEW: Ticket Color Settings
+        ticketBeingServedColor: state.nodeConfiguration.ticketBeingServedColor || '#10B981',
+        ticketCompletedColor: state.nodeConfiguration.ticketCompletedColor || '#14B8A6',
+        
         // Animation Settings
         enableAnimations: state.nodeConfiguration.enableAnimations,
         highlightDuration: state.nodeConfiguration.highlightDuration,
@@ -80,6 +84,8 @@ export default function NodoUser() {
         headerColor: '#3B82F6',
         textColor: '#1F2937',
         accentColor: '#10B981',
+        ticketBeingServedColor: '#10B981', // Default green
+        ticketCompletedColor: '#14B8A6', // Default teal
         enableAnimations: true,
         highlightDuration: 10000,
         transitionDuration: 1000,
@@ -216,6 +222,8 @@ export default function NodoUser() {
             showQueueInfo={nodeConfig.showQueueInfo}
             textColor={nodeConfig.textColor}
             accentColor={nodeConfig.accentColor}
+            ticketBeingServedColor={nodeConfig.ticketBeingServedColor} // NEW: Pass configurable color
+            ticketCompletedColor={nodeConfig.ticketCompletedColor} // NEW: Pass configurable color
             enableAnimations={nodeConfig.enableAnimations}
             isFullWidth={!nodeConfig.showCarousel}
           />

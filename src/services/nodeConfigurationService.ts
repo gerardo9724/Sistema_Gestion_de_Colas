@@ -32,7 +32,7 @@ const convertFirestoreNodeConfiguration = (doc: any): NodeConfiguration => {
     autoRotationInterval: data.autoRotationInterval || 5000,
     showQueueInfo: data.showQueueInfo ?? true,
     showCompanyLogo: data.showCompanyLogo ?? true,
-    showCompanyName: data.showCompanyName ?? true, // NEW: Company name visibility
+    showCompanyName: data.showCompanyName ?? true,
     maxTicketsDisplayed: data.maxTicketsDisplayed || 6,
     showDateTime: data.showDateTime ?? true,
     showConnectionStatus: data.showConnectionStatus ?? true,
@@ -52,6 +52,10 @@ const convertFirestoreNodeConfiguration = (doc: any): NodeConfiguration => {
     headerColor: data.headerColor || '#3B82F6',
     textColor: data.textColor || '#1F2937',
     accentColor: data.accentColor || '#10B981',
+    
+    // NEW: Ticket Color Settings
+    ticketBeingServedColor: data.ticketBeingServedColor || '#10B981', // Default green
+    ticketCompletedColor: data.ticketCompletedColor || '#14B8A6', // Default teal
     
     // Animation Settings
     enableAnimations: data.enableAnimations ?? true,
@@ -110,7 +114,7 @@ export const nodeConfigurationService = {
         autoRotationInterval: 5000,
         showQueueInfo: true,
         showCompanyLogo: true,
-        showCompanyName: true, // NEW: Default to show company name
+        showCompanyName: true,
         maxTicketsDisplayed: 6,
         showDateTime: true,
         showConnectionStatus: true,
@@ -130,6 +134,10 @@ export const nodeConfigurationService = {
         headerColor: '#3B82F6',
         textColor: '#1F2937',
         accentColor: '#10B981',
+        
+        // NEW: Ticket Color Settings
+        ticketBeingServedColor: '#10B981', // Default green
+        ticketCompletedColor: '#14B8A6', // Default teal
         
         // Animation Settings
         enableAnimations: true,
@@ -237,7 +245,7 @@ export const nodeConfigurationService = {
           autoRotationInterval: config.autoRotationInterval || 5000,
           showQueueInfo: config.showQueueInfo ?? true,
           showCompanyLogo: config.showCompanyLogo ?? true,
-          showCompanyName: config.showCompanyName ?? true, // NEW: Company name visibility
+          showCompanyName: config.showCompanyName ?? true,
           maxTicketsDisplayed: config.maxTicketsDisplayed || 6,
           showDateTime: config.showDateTime ?? true,
           showConnectionStatus: config.showConnectionStatus ?? true,
@@ -257,6 +265,10 @@ export const nodeConfigurationService = {
           headerColor: config.headerColor || '#3B82F6',
           textColor: config.textColor || '#1F2937',
           accentColor: config.accentColor || '#10B981',
+          
+          // NEW: Ticket Color Settings
+          ticketBeingServedColor: config.ticketBeingServedColor || '#10B981',
+          ticketCompletedColor: config.ticketCompletedColor || '#14B8A6',
           
           // Animation Settings
           enableAnimations: config.enableAnimations ?? true,

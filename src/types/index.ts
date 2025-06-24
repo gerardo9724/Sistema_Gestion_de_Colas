@@ -102,7 +102,7 @@ export interface SystemSettings {
   updatedAt: Date;
 }
 
-// UPDATED: Independent Node Configuration Interface with showCompanyName
+// UPDATED: Independent Node Configuration Interface with ticket colors
 export interface NodeConfiguration {
   id: string;
   
@@ -110,7 +110,7 @@ export interface NodeConfiguration {
   autoRotationInterval: number; // milliseconds
   showQueueInfo: boolean;
   showCompanyLogo: boolean;
-  showCompanyName: boolean; // NEW: Option to show/hide company name in header
+  showCompanyName: boolean; // Option to show/hide company name in header
   maxTicketsDisplayed: number;
   showDateTime: boolean;
   showConnectionStatus: boolean;
@@ -130,6 +130,10 @@ export interface NodeConfiguration {
   headerColor: string; // hex color
   textColor: string; // hex color
   accentColor: string; // hex color
+  
+  // NEW: Ticket Color Settings
+  ticketBeingServedColor: string; // hex color for tickets being served
+  ticketCompletedColor: string; // hex color for completed tickets
   
   // Animation Settings
   enableAnimations: boolean;

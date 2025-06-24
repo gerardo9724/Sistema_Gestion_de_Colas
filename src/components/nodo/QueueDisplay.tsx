@@ -11,6 +11,8 @@ interface QueueDisplayProps {
   showQueueInfo: boolean;
   textColor: string;
   accentColor: string;
+  ticketBeingServedColor: string; // NEW: Configurable color for tickets being served
+  ticketCompletedColor: string; // NEW: Configurable color for completed tickets
   enableAnimations: boolean;
   isFullWidth?: boolean;
 }
@@ -24,6 +26,8 @@ export default function QueueDisplay({
   showQueueInfo,
   textColor,
   accentColor,
+  ticketBeingServedColor, // NEW: Use configurable color
+  ticketCompletedColor, // NEW: Use configurable color
   enableAnimations,
   isFullWidth = false
 }: QueueDisplayProps) {
@@ -130,9 +134,9 @@ export default function QueueDisplay({
                     height: ticketHeight,
                     minHeight: minTicketHeight,
                     maxHeight: '80px',
-                    // UPDATED: Better color for completed tickets - soft teal instead of gray
-                    backgroundColor: isCompleted ? '#14B8A6' : accentColor, // Teal for completed, accent for being served
-                    borderColor: isCompleted ? '#14B8A6' : accentColor,
+                    // UPDATED: Use configurable colors from node configuration
+                    backgroundColor: isCompleted ? ticketCompletedColor : ticketBeingServedColor,
+                    borderColor: isCompleted ? ticketCompletedColor : ticketBeingServedColor,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
                     opacity: isCompleted ? 0.85 : 1 // Slightly transparent for completed tickets
                   }}
@@ -150,10 +154,10 @@ export default function QueueDisplay({
                     </>
                   )}
 
-                  {/* NEW: Check icon for completed tickets */}
+                  {/* Check icon for completed tickets */}
                   {isCompleted && (
                     <div className="absolute top-1 right-1 bg-white bg-opacity-90 rounded-full p-1 z-30">
-                      <CheckCircle size={16} className="text-teal-600" />
+                      <CheckCircle size={16} className="text-white" />
                     </div>
                   )}
                   

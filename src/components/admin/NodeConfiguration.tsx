@@ -45,6 +45,10 @@ export default function NodeConfiguration() {
     textColor: '#1F2937',
     accentColor: '#10B981',
     
+    // NEW: Ticket Color Settings
+    ticketBeingServedColor: '#10B981', // Default green
+    ticketCompletedColor: '#14B8A6', // Default teal
+    
     // Animation Settings
     enableAnimations: true,
     highlightDuration: 10000,
@@ -90,6 +94,10 @@ export default function NodeConfiguration() {
         headerColor: state.nodeConfiguration.headerColor || '#3B82F6',
         textColor: state.nodeConfiguration.textColor || '#1F2937',
         accentColor: state.nodeConfiguration.accentColor || '#10B981',
+        
+        // NEW: Ticket Color Settings
+        ticketBeingServedColor: state.nodeConfiguration.ticketBeingServedColor || '#10B981',
+        ticketCompletedColor: state.nodeConfiguration.ticketCompletedColor || '#14B8A6',
         
         // Animation Settings
         enableAnimations: state.nodeConfiguration.enableAnimations ?? true,
@@ -156,6 +164,10 @@ export default function NodeConfiguration() {
         headerColor: '#3B82F6',
         textColor: '#1F2937',
         accentColor: '#10B981',
+        
+        // NEW: Ticket Color Settings
+        ticketBeingServedColor: '#10B981',
+        ticketCompletedColor: '#14B8A6',
         
         // Animation Settings
         enableAnimations: true,
@@ -677,6 +689,49 @@ export default function NodeConfiguration() {
                       />
                     </div>
                   </div>
+
+                  {/* NEW: Ticket Color Settings */}
+                  <div>
+                    <label className="block text-sm font-medium text-purple-700 mb-2">
+                      🎫 Color de Tickets en Atención
+                    </label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="color"
+                        value={config.ticketBeingServedColor}
+                        onChange={(e) => setConfig({ ...config, ticketBeingServedColor: e.target.value })}
+                        className="w-12 h-10 border border-purple-300 rounded cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={config.ticketBeingServedColor}
+                        onChange={(e) => setConfig({ ...config, ticketBeingServedColor: e.target.value })}
+                        className="flex-1 p-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-purple-600 mt-1">Color para tickets que están siendo atendidos actualmente</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-purple-700 mb-2">
+                      ✅ Color de Tickets Completados
+                    </label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="color"
+                        value={config.ticketCompletedColor}
+                        onChange={(e) => setConfig({ ...config, ticketCompletedColor: e.target.value })}
+                        className="w-12 h-10 border border-purple-300 rounded cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={config.ticketCompletedColor}
+                        onChange={(e) => setConfig({ ...config, ticketCompletedColor: e.target.value })}
+                        className="flex-1 p-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-purple-600 mt-1">Color para tickets que ya fueron completados hoy</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -766,7 +821,7 @@ export default function NodeConfiguration() {
           </div>
         </div>
 
-        {/* NEW: Carousel Images Management Section */}
+        {/* Carousel Images Management Section */}
         <div className="mt-8 border border-indigo-200 rounded-xl p-6 bg-indigo-50">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
