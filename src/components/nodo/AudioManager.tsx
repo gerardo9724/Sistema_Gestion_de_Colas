@@ -27,7 +27,7 @@ export default function AudioManager({
   highlightDuration
 }: AudioManagerProps) {
 
-  // FIXED: Monitor for new tickets being served (for announcements) - SINGLE CALL ONLY
+  // CRITICAL: Monitor for new tickets being served - SINGLE CALL ONLY
   useEffect(() => {
     if (!audioEnabled) return;
 
@@ -45,7 +45,7 @@ export default function AudioManager({
       const employee = employees.find(emp => emp.id === newlyServedTicket.servedBy);
       
       if (employee) {
-        console.log('🔊 NEW TICKET CALL DETECTED:', {
+        console.log('🔊 NEW TICKET CALL DETECTED - SINGLE ANNOUNCEMENT:', {
           ticketNumber: newlyServedTicket.number,
           employeeName: employee.name,
           lastAnnounced: lastAnnouncedTicket,
@@ -61,7 +61,7 @@ export default function AudioManager({
         // Play notification sound
         playNotificationSound();
         
-        // SINGLE announcement after 800ms
+        // SINGLE announcement after 800ms - NO DUPLICATES
         setTimeout(() => {
           announceTicket(newlyServedTicket.number, employee.name);
         }, 800);
