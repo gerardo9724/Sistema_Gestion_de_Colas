@@ -1,12 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { Save, Eye, EyeOff, Monitor, Volume2, VolumeX, Palette, Settings, RotateCcw, Type } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Save, Eye, EyeOff, Monitor, Volume2, VolumeX, Palette, Settings, RotateCcw, Type, Plus, Trash2, Upload, Image as ImageIcon, Edit } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
+import { carouselService } from '../../services/carouselService';
+import type { CarouselImage } from '../../types';
 
 export default function NodeConfiguration() {
-  const { state, updateNodeConfiguration, saveCompleteNodeConfiguration } = useApp();
+  const { state, updateNodeConfiguration, saveCompleteNodeConfiguration, loadInitialData } = useApp();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [editingImage, setEditingImage] = useState<CarouselImage | null>(null);
+  const [imageFormData, setImageFormData] = useState({
+    name: '',
+    url: '',
+    description: '',
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state with all configuration options
   const [config, setConfig] = useState({
@@ -14,7 +24,7 @@ export default function NodeConfiguration() {
     autoRotationInterval: 5000,
     showQueueInfo: true,
     showCompanyLogo: true,
-    showCompanyName: true, // NEW: Company name visibility in header
+    showCompanyName: true,
     maxTicketsDisplayed: 6,
     showDateTime: true,
     showConnectionStatus: true,
@@ -60,7 +70,7 @@ export default function NodeConfiguration() {
         autoRotationInterval: state.nodeConfiguration.autoRotationInterval || 5000,
         showQueueInfo: state.nodeConfiguration.showQueueInfo ?? true,
         showCompanyLogo: state.nodeConfiguration.showCompanyLogo ?? true,
-        showCompanyName: state.nodeConfiguration.showCompanyName ?? true, // NEW: Load company name setting
+        showCompanyName: state.nodeConfiguration.showCompanyName ?? true,
         maxTicketsDisplayed: state.nodeConfiguration.maxTicketsDisplayed || 6,
         showDateTime: state.nodeConfiguration.showDateTime ?? true,
         showConnectionStatus: state.nodeConfiguration.showConnectionStatus ?? true,
@@ -126,7 +136,7 @@ export default function NodeConfiguration() {
         autoRotationInterval: 5000,
         showQueueInfo: true,
         showCompanyLogo: true,
-        showCompanyName: true, // NEW: Default company name to visible
+        showCompanyName: true,
         maxTicketsDisplayed: 6,
         showDateTime: true,
         showConnectionStatus: true,
@@ -163,6 +173,112 @@ export default function NodeConfiguration() {
         scrollingSpeed: 5,
       });
     }
+  };
+
+  // Image management functions
+  const resetImageForm = () => {
+    setImageFormData({
+      name: '',
+      url: '',
+      description: '',
+    });
+    setEditingImage(null);
+    setError('');
+  };
+
+  const handleAddImage = () => {
+    resetImageForm();
+    setShowImageModal(true);
+  };
+
+  const handleEditImage = (image: CarouselImage) => {
+    setEditingImage(image);
+    setImageFormData({
+      name: image.name,
+      url: image.url,
+      description: image.description || '',
+    });
+    setShowImageModal(true);
+  };
+
+  const handleDeleteImage = async (imageId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta imagen?')) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await carouselService.deleteCarouselImage(imageId);
+      await loadInitialData();
+      setSuccess('Imagen eliminada exitosamente');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      setError('Error al eliminar imagen');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!imageFormData.name.trim() || !imageFormData.url.trim()) {
+      setError('Nombre y URL son requeridos');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      if (editingImage) {
+        // Update existing image (Note: carouselService doesn't have update method, so we'll delete and recreate)
+        await carouselService.deleteCarouselImage(editingImage.id);
+      }
+      
+      await carouselService.createCarouselImage({
+        name: imageFormData.name.trim(),
+        url: imageFormData.url.trim(),
+        description: imageFormData.description.trim() || undefined,
+      });
+
+      await loadInitialData();
+      setShowImageModal(false);
+      resetImageForm();
+      setSuccess(editingImage ? 'Imagen actualizada exitosamente' : 'Imagen agregada exitosamente');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Error saving image:', error);
+      setError('Error al guardar imagen');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Por favor selecciona un archivo de imagen válido');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('El archivo es demasiado grande. Máximo 5MB permitido');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      setImageFormData(prev => ({ ...prev, url: result }));
+      setError('');
+    };
+    reader.readAsDataURL(file);
   };
 
   const voiceOptions = [
@@ -322,7 +438,6 @@ export default function NodeConfiguration() {
                   </label>
                   <p className="text-xs text-green-600 ml-8">El header con navegación, hora y estado será visible</p>
 
-                  {/* NEW: Company Name Visibility Option */}
                   <label className="flex items-center space-x-3 cursor-pointer">
                     <input
                       type="checkbox"
@@ -651,6 +766,83 @@ export default function NodeConfiguration() {
           </div>
         </div>
 
+        {/* NEW: Carousel Images Management Section */}
+        <div className="mt-8 border border-indigo-200 rounded-xl p-6 bg-indigo-50">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="bg-indigo-500 p-2 rounded-lg">
+                <ImageIcon size={24} className="text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-indigo-800">Gestión de Imágenes del Carrusel</h3>
+            </div>
+            <button
+              onClick={handleAddImage}
+              className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+            >
+              <Plus size={16} />
+              <span>Agregar Imagen</span>
+            </button>
+          </div>
+
+          {/* Images Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {state.carouselImages.map((image, index) => (
+              <div key={image.id} className="bg-white rounded-lg border border-indigo-200 overflow-hidden shadow-sm">
+                <div className="aspect-video bg-gray-100 relative">
+                  <img
+                    src={image.url}
+                    alt={image.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y3ZjdmNyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZW4gbm8gZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=';
+                    }}
+                  />
+                  <div className="absolute top-2 right-2 bg-indigo-500 text-white px-2 py-1 rounded text-xs font-medium">
+                    #{index + 1}
+                  </div>
+                </div>
+                <div className="p-4">
+                  <h4 className="font-semibold text-indigo-900 mb-1 truncate">{image.name}</h4>
+                  {image.description && (
+                    <p className="text-sm text-indigo-700 mb-3 line-clamp-2">{image.description}</p>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      image.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {image.isActive ? 'Activa' : 'Inactiva'}
+                    </span>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleEditImage(image)}
+                        className="bg-orange-500 hover:bg-orange-600 text-white p-1.5 rounded transition-colors"
+                        title="Editar imagen"
+                      >
+                        <Edit size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteImage(image.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded transition-colors"
+                        title="Eliminar imagen"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {state.carouselImages.length === 0 && (
+              <div className="col-span-full text-center py-12">
+                <ImageIcon size={64} className="mx-auto text-indigo-300 mb-4" />
+                <p className="text-xl text-indigo-500 font-semibold mb-2">No hay imágenes en el carrusel</p>
+                <p className="text-indigo-400">Agrega imágenes para mostrar publicidad en el módulo nodo</p>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Save Button (Bottom) */}
         <div className="mt-8 flex justify-center">
           <button
@@ -663,6 +855,130 @@ export default function NodeConfiguration() {
           </button>
         </div>
       </div>
+
+      {/* Image Modal */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold text-gray-800 mb-6">
+              {editingImage ? 'Editar Imagen' : 'Agregar Nueva Imagen'}
+            </h3>
+            
+            <form onSubmit={handleSaveImage} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre de la Imagen
+                </label>
+                <input
+                  type="text"
+                  value={imageFormData.name}
+                  onChange={(e) => setImageFormData({ ...imageFormData, name: e.target.value })}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Ej: Promoción de Verano"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  URL de la Imagen
+                </label>
+                <input
+                  type="url"
+                  value={imageFormData.url}
+                  onChange={(e) => setImageFormData({ ...imageFormData, url: e.target.value })}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="https://ejemplo.com/imagen.jpg"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Puedes usar URLs de Pexels, Unsplash o subir tu propia imagen
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Subir Imagen desde Archivo
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full bg-gray-100 hover:bg-gray-200 border-2 border-dashed border-gray-300 rounded-lg p-4 text-center transition-colors"
+                >
+                  <Upload size={24} className="mx-auto text-gray-400 mb-2" />
+                  <span className="text-gray-600">Haz clic para subir una imagen</span>
+                  <p className="text-xs text-gray-500 mt-1">Máximo 5MB - JPG, PNG, GIF</p>
+                </button>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descripción (Opcional)
+                </label>
+                <textarea
+                  value={imageFormData.description}
+                  onChange={(e) => setImageFormData({ ...imageFormData, description: e.target.value })}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                  rows={3}
+                  placeholder="Descripción de la imagen o promoción"
+                />
+              </div>
+
+              {/* Image Preview */}
+              {imageFormData.url && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Vista Previa
+                  </label>
+                  <div className="border border-gray-300 rounded-lg p-2">
+                    <img
+                      src={imageFormData.url}
+                      alt="Vista previa"
+                      className="w-full h-32 object-cover rounded"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-600 text-sm">{error}</p>
+                </div>
+              )}
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImageModal(false);
+                    resetImageForm();
+                  }}
+                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex-1 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+                >
+                  {isLoading ? 'Guardando...' : editingImage ? 'Actualizar' : 'Agregar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
