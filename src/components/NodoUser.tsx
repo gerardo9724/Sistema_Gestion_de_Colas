@@ -119,21 +119,21 @@ export default function NodoUser() {
     dispatch({ type: 'SET_CURRENT_USER', payload: null });
   };
 
-  // CRITICAL: Get ALL tickets being served - NEVER filter them out
-  // This ensures that tickets that were called remain visible until they are completed/cancelled
+  // CRITICAL FIXED: Proper ticket ordering - NEW CALLED TICKET GOES TO TOP
   const beingServedTickets = state.tickets
     .filter(ticket => ticket.status === 'being_served')
     .sort((a, b) => {
-      // CRITICAL: Highlighted ticket always goes first
+      // CRITICAL: Highlighted ticket (newly called) ALWAYS goes first (top position)
       if (highlightedTicket === a.id && highlightedTicket !== b.id) return -1;
       if (highlightedTicket === b.id && highlightedTicket !== a.id) return 1;
       
-      // FIXED: Sort by served time - MOST RECENT FIRST (last called first)
+      // FIXED: For non-highlighted tickets, sort by served time - MOST RECENT FIRST
+      // This ensures that when a new ticket is called, the previous one moves down
       const aTime = a.servedAt ? new Date(a.servedAt).getTime() : 0;
       const bTime = b.servedAt ? new Date(b.servedAt).getTime() : 0;
-      return bTime - aTime; // Most recent (last called) first
+      return bTime - aTime; // Most recent (last called) first, then older ones below
     });
-    // REMOVED: .slice(0, nodeConfig.maxTicketsDisplayed) - Let QueueDisplay handle the limit
+    // CRITICAL: NO .slice() here - QueueDisplay handles the limit internally
 
   // Get next tickets in queue - limited to 2 only
   const waitingTickets = state.tickets
