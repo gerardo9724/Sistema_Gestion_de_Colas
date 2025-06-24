@@ -44,6 +44,10 @@ export default function EmpleadoUser() {
   const [originalServiceStartTime, setOriginalServiceStartTime] = useState<Date | null>(null);
   // FIXED: Add a flag to track if we've already initialized the timer for this ticket
   const [currentTicketId, setCurrentTicketId] = useState<string | null>(null);
+  
+  // NEW: State for recall button feedback
+  const [isRecalling, setIsRecalling] = useState(false);
+  const [recallSuccess, setRecallSuccess] = useState(false);
 
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
@@ -292,12 +296,21 @@ export default function EmpleadoUser() {
     }
   };
 
-  // FIXED: Handle ticket recall (call client again in the node) - NO TIMER RESET
+  // FIXED: Handle ticket recall with proper visual feedback and state management
   const handleRecallTicket = async () => {
     if (!currentEmployee || !currentTicket) {
       console.warn('No hay ticket en atención para volver a llamar');
       return;
     }
+
+    // FIXED: Prevent multiple simultaneous recalls
+    if (isRecalling) {
+      console.log('🔄 Recall already in progress, ignoring duplicate request');
+      return;
+    }
+
+    setIsRecalling(true);
+    setRecallSuccess(false);
 
     try {
       console.log('🔊 Recalling ticket:', currentTicket.number);
@@ -311,8 +324,23 @@ export default function EmpleadoUser() {
       });
 
       console.log('✅ Ticket recall triggered successfully - Timer preserved');
+      
+      // FIXED: Show success feedback
+      setRecallSuccess(true);
+      
+      // FIXED: Reset success state after 2 seconds
+      setTimeout(() => {
+        setRecallSuccess(false);
+      }, 2000);
+      
     } catch (error) {
       console.error('❌ Error recalling ticket:', error);
+      alert('Error al volver a llamar el ticket');
+    } finally {
+      // FIXED: Reset recall state after a short delay to prevent rapid clicking
+      setTimeout(() => {
+        setIsRecalling(false);
+      }, 1000); // 1 second cooldown
     }
   };
 
@@ -550,14 +578,35 @@ export default function EmpleadoUser() {
                 </div>
               </div>
               
-              {/* FIXED: Added Recall Button - NO TIMER RESET */}
+              {/* FIXED: Enhanced Recall Button with Visual Feedback */}
               <div className="mb-4">
                 <button
                   onClick={handleRecallTicket}
-                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                  disabled={isRecalling}
+                  className={`w-full py-3 px-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center space-x-2 ${
+                    recallSuccess 
+                      ? 'bg-green-500 text-white transform scale-105' 
+                      : isRecalling 
+                        ? 'bg-yellow-400 text-yellow-900 cursor-not-allowed' 
+                        : 'bg-yellow-500 hover:bg-yellow-600 text-white hover:transform hover:scale-105 active:scale-95'
+                  }`}
                 >
-                  <Volume2 size={20} />
-                  <span>Volver a Llamar Cliente</span>
+                  {recallSuccess ? (
+                    <>
+                      <CheckCircle size={20} />
+                      <span>¡Cliente Llamado!</span>
+                    </>
+                  ) : isRecalling ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-900"></div>
+                      <span>Llamando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 size={20} />
+                      <span>Volver a Llamar Cliente</span>
+                    </>
+                  )}
                 </button>
                 <p className="text-xs text-gray-500 mt-1 text-center">
                   ⏰ El cronómetro NO se reiniciará - El anuncio se reproducirá nuevamente en el módulo nodo
