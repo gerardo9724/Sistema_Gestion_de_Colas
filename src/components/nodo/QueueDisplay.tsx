@@ -28,23 +28,12 @@ export default function QueueDisplay({
   isFullWidth = false
 }: QueueDisplayProps) {
 
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const getServiceTime = (ticket: Ticket) => {
-    if (!ticket.servedAt) return 0;
-    return Math.floor((new Date().getTime() - new Date(ticket.servedAt).getTime()) / 1000);
-  };
-
-  // FIXED: Create vertical slots for all tickets being served (no grid, just vertical list)
+  // FIXED: Create vertical slots that fit exactly in the available space - NO SCROLL
   const createVerticalTicketSlots = () => {
     const slots = [];
     const totalSlots = maxTicketsDisplayed;
     
-    // Fill with actual tickets first (already sorted by order of attention)
+    // CRITICAL: Show ALL tickets being served up to the limit (no filtering)
     for (let i = 0; i < Math.min(beingServedTickets.length, totalSlots); i++) {
       slots.push({ type: 'ticket', ticket: beingServedTickets[i], index: i });
     }
@@ -59,6 +48,10 @@ export default function QueueDisplay({
 
   const ticketSlots = createVerticalTicketSlots();
 
+  // FIXED: Calculate exact height per ticket to avoid scroll
+  const ticketHeight = `calc((100% - 120px) / ${maxTicketsDisplayed})`;
+  const minTicketHeight = '60px';
+
   return (
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col overflow-hidden">
       <h2 className={`${isFullWidth ? 'text-2xl' : 'text-xl'} font-bold mb-4 text-center flex items-center justify-center space-x-2`} style={{ color: textColor }}>
@@ -67,7 +60,7 @@ export default function QueueDisplay({
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {/* Currently Being Served - FIXED: Vertical layout only */}
+        {/* Currently Being Served - FIXED: No scroll, exact fit */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
@@ -76,111 +69,98 @@ export default function QueueDisplay({
             </h3>
           </div>
           
-          {/* FIXED: Vertical distribution only - single column layout */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="space-y-3">
-              {ticketSlots.map((slot) => {
-                if (slot.type === 'empty') {
-                  return (
-                    <div 
-                      key={`empty-${slot.index}`}
-                      className={`rounded-xl p-4 text-center shadow-lg flex items-center justify-between border-2 border-dashed border-gray-300 bg-gray-50 ${
-                        enableAnimations ? 'transition-all duration-300 hover:bg-gray-100' : ''
-                      }`}
-                      style={{
-                        minHeight: '80px',
-                      }}
-                    >
-                      <div className="flex-1 flex items-center justify-center text-gray-400">
-                        <div className="text-center">
-                          <div className="text-xl font-bold mb-1 opacity-50">---</div>
-                          <div className="text-sm font-medium">Disponible</div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                const ticket = slot.ticket!;
-                const employee = employees.find(emp => emp.id === ticket.servedBy);
-                const isHighlighted = highlightedTicket === ticket.id;
-                const serviceTime = getServiceTime(ticket);
-                
+          {/* FIXED: Vertical distribution with exact sizing - NO SCROLL */}
+          <div className="flex-1 flex flex-col space-y-2" style={{ height: 'calc(100% - 40px)' }}>
+            {ticketSlots.map((slot) => {
+              if (slot.type === 'empty') {
                 return (
                   <div 
-                    key={ticket.id} 
-                    className={`rounded-xl p-4 shadow-lg flex items-center justify-between relative border-2 overflow-hidden ${
-                      enableAnimations ? 'transition-all duration-500' : ''
+                    key={`empty-${slot.index}`}
+                    className={`rounded-xl p-3 text-center shadow-lg flex items-center justify-center border-2 border-dashed border-gray-300 bg-gray-50 ${
+                      enableAnimations ? 'transition-all duration-300 hover:bg-gray-100' : ''
                     }`}
                     style={{
-                      minHeight: '80px',
-                      backgroundColor: accentColor,
-                      borderColor: accentColor,
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                      height: ticketHeight,
+                      minHeight: minTicketHeight,
+                      maxHeight: '80px'
                     }}
                   >
-                    {/* FIXED: Internal highlight effects - NO box resizing, only content animation */}
-                    {isHighlighted && (
-                      <>
-                        {/* Subtle background pulse - CONTAINED */}
-                        <div className="absolute inset-2 bg-white bg-opacity-20 rounded-lg animate-pulse"></div>
-                        
-                        {/* Calling badge - POSITIONED INSIDE */}
-                        <div className="absolute top-2 left-2 bg-yellow-400 text-red-800 px-2 py-1 rounded-full text-xs font-bold animate-bounce z-30">
-                          ¡LLAMANDO!
-                        </div>
-                      </>
-                    )}
-                    
-                    {/* FIXED: Ticket content with internal scaling animation - HORIZONTAL LAYOUT */}
-                    <div className={`relative z-20 flex items-center justify-between w-full text-white ${
-                      isHighlighted && enableAnimations ? 'animate-pulse' : ''
-                    }`}>
-                      {/* Left side - Ticket number and service */}
-                      <div className={`flex items-center space-x-4 ${
-                        isHighlighted && enableAnimations ? 'transform scale-110 transition-transform duration-1000' : ''
-                      }`}>
-                        <div className="text-3xl font-bold drop-shadow-lg">
-                          #{ticket.number.toString().padStart(3, '0')}
-                        </div>
-                        <div className="flex flex-col">
-                          <div className="text-lg font-bold drop-shadow">
-                            {ticket.serviceType.toUpperCase()}
-                          </div>
-                          <div className="text-sm opacity-90">
-                            {new Date(ticket.servedAt || ticket.createdAt).toLocaleTimeString()}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Center - Employee info */}
-                      <div className={`flex flex-col items-center text-center ${
-                        isHighlighted && enableAnimations ? 'transform scale-105 transition-transform duration-1000' : ''
-                      }`}>
-                        <div className="text-base font-bold mb-1 drop-shadow">
-                          {employee?.name || 'N/A'}
-                        </div>
-                        <div className="text-xs opacity-90">
-                          {employee?.position}
-                        </div>
-                      </div>
-                      
-                      {/* Right side - Service time */}
-                      <div className={`flex flex-col items-end text-right ${
-                        isHighlighted && enableAnimations ? 'transform scale-105 transition-transform duration-1000' : ''
-                      }`}>
-                        <div className="text-lg font-bold font-mono drop-shadow">
-                          {formatTime(serviceTime)}
-                        </div>
-                        <div className="text-xs opacity-75">
-                          Tiempo de servicio
-                        </div>
+                    <div className="flex-1 flex items-center justify-center text-gray-400">
+                      <div className="text-center">
+                        <div className="text-lg font-bold mb-1 opacity-50">---</div>
+                        <div className="text-xs font-medium">Disponible</div>
                       </div>
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              }
+
+              const ticket = slot.ticket!;
+              const employee = employees.find(emp => emp.id === ticket.servedBy);
+              const isHighlighted = highlightedTicket === ticket.id;
+              
+              return (
+                <div 
+                  key={ticket.id} 
+                  className={`rounded-xl p-3 shadow-lg flex items-center justify-between relative border-2 overflow-hidden ${
+                    enableAnimations ? 'transition-all duration-500' : ''
+                  }`}
+                  style={{
+                    height: ticketHeight,
+                    minHeight: minTicketHeight,
+                    maxHeight: '80px',
+                    backgroundColor: accentColor,
+                    borderColor: accentColor,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                  }}
+                >
+                  {/* FIXED: Internal highlight effects - NO box resizing, only content animation */}
+                  {isHighlighted && (
+                    <>
+                      {/* Subtle background pulse - CONTAINED */}
+                      <div className="absolute inset-1 bg-white bg-opacity-20 rounded-lg animate-pulse"></div>
+                      
+                      {/* Calling badge - POSITIONED INSIDE */}
+                      <div className="absolute top-1 left-1 bg-yellow-400 text-red-800 px-2 py-1 rounded-full text-xs font-bold animate-bounce z-30">
+                        ¡LLAMANDO!
+                      </div>
+                    </>
+                  )}
+                  
+                  {/* FIXED: SIMPLIFIED ticket content - ONLY basic info */}
+                  <div className={`relative z-20 flex items-center justify-between w-full text-white ${
+                    isHighlighted && enableAnimations ? 'animate-pulse' : ''
+                  }`}>
+                    {/* Left side - ONLY Ticket number */}
+                    <div className={`flex items-center ${
+                      isHighlighted && enableAnimations ? 'transform scale-110 transition-transform duration-1000' : ''
+                    }`}>
+                      <div className="text-2xl font-bold drop-shadow-lg">
+                        #{ticket.number.toString().padStart(3, '0')}
+                      </div>
+                    </div>
+                    
+                    {/* Center - ONLY Employee name */}
+                    <div className={`flex flex-col items-center text-center ${
+                      isHighlighted && enableAnimations ? 'transform scale-105 transition-transform duration-1000' : ''
+                    }`}>
+                      <div className="text-base font-bold drop-shadow">
+                        {employee?.name || 'N/A'}
+                      </div>
+                    </div>
+                    
+                    {/* Right side - ONLY Service area */}
+                    <div className={`flex items-center text-right ${
+                      isHighlighted && enableAnimations ? 'transform scale-105 transition-transform duration-1000' : ''
+                    }`}>
+                      <div className="text-sm font-bold drop-shadow">
+                        {ticket.serviceType.toUpperCase()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -195,7 +175,7 @@ export default function QueueDisplay({
                 </h3>
               </div>
               
-              <div className={`grid ${isFullWidth ? 'grid-cols-4' : 'grid-cols-2'} gap-2`} style={{ height: isFullWidth ? '70px' : '60px' }}>
+              <div className={`grid ${isFullWidth ? 'grid-cols-4' : 'grid-cols-2'} gap-2`} style={{ height: isFullWidth ? '60px' : '50px' }}>
                 {waitingTickets.slice(0, isFullWidth ? 4 : 2).map((ticket, index) => {
                   return (
                     <div 
@@ -208,7 +188,7 @@ export default function QueueDisplay({
                           : 'bg-white border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      <div className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold mb-0.5 ${
+                      <div className={`${isFullWidth ? 'text-base' : 'text-sm'} font-bold mb-0.5 ${
                         index === 0 ? 'text-yellow-900' : 'text-gray-800'
                       }`}>
                         #{ticket.number.toString().padStart(3, '0')}
@@ -225,7 +205,7 @@ export default function QueueDisplay({
                 {/* Fill empty slots */}
                 {Array.from({ length: (isFullWidth ? 4 : 2) - waitingTickets.length }).map((_, index) => (
                   <div key={`empty-waiting-${index}`} className="bg-gray-50 rounded-md p-1.5 text-center flex flex-col justify-center border border-dashed border-gray-300">
-                    <div className={`${isFullWidth ? 'text-base' : 'text-sm'} font-bold mb-0.5 text-gray-400`}>---</div>
+                    <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} font-bold mb-0.5 text-gray-400`}>---</div>
                     <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} text-gray-400`}>Vacío</div>
                   </div>
                 ))}

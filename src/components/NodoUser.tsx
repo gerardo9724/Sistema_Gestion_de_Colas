@@ -119,7 +119,8 @@ export default function NodoUser() {
     dispatch({ type: 'SET_CURRENT_USER', payload: null });
   };
 
-  // FIXED: Get tickets being served - sorted by LAST CALLED FIRST (most recent servedAt time)
+  // CRITICAL: Get ALL tickets being served - NEVER filter them out
+  // This ensures that tickets that were called remain visible until they are completed/cancelled
   const beingServedTickets = state.tickets
     .filter(ticket => ticket.status === 'being_served')
     .sort((a, b) => {
@@ -131,8 +132,8 @@ export default function NodoUser() {
       const aTime = a.servedAt ? new Date(a.servedAt).getTime() : 0;
       const bTime = b.servedAt ? new Date(b.servedAt).getTime() : 0;
       return bTime - aTime; // Most recent (last called) first
-    })
-    .slice(0, nodeConfig.maxTicketsDisplayed);
+    });
+    // REMOVED: .slice(0, nodeConfig.maxTicketsDisplayed) - Let QueueDisplay handle the limit
 
   // Get next tickets in queue - limited to 2 only
   const waitingTickets = state.tickets
