@@ -21,8 +21,6 @@ import { useApp } from '../contexts/AppContext';
 import { authService } from '../services/authService';
 import { ticketService } from '../services/ticketService';
 import { employeeService } from '../services/employeeService';
-import EnhancedDeriveTicketModal from './employee/EnhancedDeriveTicketModal';
-import QueueStatusCard from './employee/QueueStatusCard';
 
 type TabType = 'queue' | 'profile' | 'stats';
 
@@ -44,12 +42,12 @@ export default function EmpleadoUser() {
   const [profileUsername, setProfileUsername] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [queueStats, setQueueStats] = useState({
-    personalQueueCount: 0,
-    generalQueueCount: 0,
-    totalWaitingCount: 0,
-    nextTicketType: 'none' as 'personal' | 'general' | 'none'
-  });
+
+  // Derivation modal state
+  const [deriveType, setDeriveType] = useState<'queue' | 'employee'>('queue');
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [selectedServiceType, setSelectedServiceType] = useState('');
+  const [derivationComment, setDerivationComment] = useState('');
 
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
@@ -79,25 +77,6 @@ export default function EmpleadoUser() {
 
     initializeEmployeePauseState();
   }, [currentEmployee?.id]);
-
-  // Load queue statistics
-  useEffect(() => {
-    const loadQueueStats = async () => {
-      if (currentEmployee) {
-        try {
-          const stats = await getEmployeeQueueStats(currentEmployee.id);
-          setQueueStats(stats);
-        } catch (error) {
-          console.error('Error loading queue stats:', error);
-        }
-      }
-    };
-
-    loadQueueStats();
-    // Refresh stats every 10 seconds
-    const interval = setInterval(loadQueueStats, 10000);
-    return () => clearInterval(interval);
-  }, [currentEmployee?.id, getEmployeeQueueStats]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -292,16 +271,7 @@ export default function EmpleadoUser() {
     }
   };
 
-  const handleDeriveTicket = async (
-    targetType: 'queue' | 'employee',
-    targetId?: string,
-    options?: {
-      newServiceType?: string;
-      priority?: 'normal' | 'high' | 'urgent';
-      reason?: string;
-      comment?: string;
-    }
-  ) => {
+  const handleDeriveTicket = async () => {
     if (!currentEmployee) return;
 
     const currentTicket = state.tickets.find(t => 
@@ -310,10 +280,21 @@ export default function EmpleadoUser() {
 
     if (!currentTicket) return;
 
+    if (deriveType === 'employee' && !selectedEmployee) {
+      alert('Debe seleccionar un empleado');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      if (targetType === 'employee' && targetId) {
-        await deriveTicketToEmployee(currentTicket.id, currentEmployee.id, targetId, options);
+      const options = {
+        newServiceType: selectedServiceType !== currentTicket.serviceType ? selectedServiceType : undefined,
+        reason: derivationComment.trim() || 'Derivación desde módulo empleado',
+        comment: derivationComment.trim(),
+      };
+
+      if (deriveType === 'employee') {
+        await deriveTicketToEmployee(currentTicket.id, currentEmployee.id, selectedEmployee, options);
       } else {
         await deriveTicketToQueue(currentTicket.id, currentEmployee.id, options);
       }
@@ -322,6 +303,10 @@ export default function EmpleadoUser() {
       setElapsedTime(0);
       setIsTimerRunning(false);
       setShowDeriveModal(false);
+      setDeriveType('queue');
+      setSelectedEmployee('');
+      setSelectedServiceType('');
+      setDerivationComment('');
       
       alert('Ticket derivado exitosamente');
     } catch (error) {
@@ -549,7 +534,10 @@ export default function EmpleadoUser() {
                 </button>
                 
                 <button
-                  onClick={() => setShowDeriveModal(true)}
+                  onClick={() => {
+                    setSelectedServiceType(currentTicket.serviceType);
+                    setShowDeriveModal(true);
+                  }}
                   className="bg-purple-500 hover:bg-purple-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
                 >
                   <ArrowRight size={20} />
@@ -580,97 +568,87 @@ export default function EmpleadoUser() {
         )}
       </div>
 
-      {/* Queue Information */}
-      <div className="space-y-6">
-        {/* Queue Status Card */}
-        <QueueStatusCard
-          personalQueueCount={queueStats.personalQueueCount}
-          generalQueueCount={queueStats.generalQueueCount}
-          nextTicketType={queueStats.nextTicketType}
-        />
-
-        {/* Waiting Queue */}
-        <div className="bg-white rounded-2xl shadow-xl p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">
-            Cola de Espera ({waitingTickets.length})
-          </h2>
-          
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {waitingTickets.map((ticket, index) => {
-              const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
-              const isPersonalQueue = ticket.queueType === 'personal' && ticket.assignedToEmployee === currentEmployee?.id;
-              
-              return (
-                <div
-                  key={ticket.id}
-                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                    index === 0 
-                      ? isPersonalQueue 
-                        ? 'border-purple-400 bg-purple-50' 
-                        : 'border-yellow-400 bg-yellow-50'
-                      : 'border-gray-200 bg-gray-50'
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="flex items-center space-x-3">
-                        <div className="text-2xl font-bold text-gray-800">
-                          #{ticket.number.toString().padStart(3, '0')}
-                        </div>
-                        {index === 0 && (
-                          <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                            isPersonalQueue 
-                              ? 'bg-purple-100 text-purple-800' 
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {isPersonalQueue ? 'COLA PERSONAL' : 'SIGUIENTE'}
-                          </span>
-                        )}
-                        {isPersonalQueue && index > 0 && (
-                          <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2 py-1 rounded-full">
-                            PERSONAL
-                          </span>
-                        )}
+      {/* Waiting Queue */}
+      <div className="bg-white rounded-2xl shadow-xl p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">
+          Cola de Espera ({waitingTickets.length})
+        </h2>
+        
+        <div className="space-y-4 max-h-96 overflow-y-auto">
+          {waitingTickets.map((ticket, index) => {
+            const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
+            const isPersonalQueue = ticket.queueType === 'personal' && ticket.assignedToEmployee === currentEmployee?.id;
+            
+            return (
+              <div
+                key={ticket.id}
+                className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                  index === 0 
+                    ? isPersonalQueue 
+                      ? 'border-purple-400 bg-purple-50' 
+                      : 'border-yellow-400 bg-yellow-50'
+                    : 'border-gray-200 bg-gray-50'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="flex items-center space-x-3">
+                      <div className="text-2xl font-bold text-gray-800">
+                        #{ticket.number.toString().padStart(3, '0')}
                       </div>
-                      <div className="text-lg font-semibold text-gray-600">
-                        {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {ticket.createdAt.toLocaleTimeString()}
-                      </div>
-                      <div className="text-sm text-orange-600 font-medium">
-                        Esperando: {formatTime(waitTime)}
-                      </div>
-                      {ticket.derivedFrom && (
-                        <div className="text-sm text-purple-600 font-medium">
-                          Derivado desde: {state.employees.find(e => e.id === ticket.derivedFrom)?.name || 'Empleado'}
-                        </div>
+                      {index === 0 && (
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                          isPersonalQueue 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {isPersonalQueue ? 'COLA PERSONAL' : 'SIGUIENTE'}
+                        </span>
+                      )}
+                      {isPersonalQueue && index > 0 && (
+                        <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2 py-1 rounded-full">
+                          PERSONAL
+                        </span>
                       )}
                     </div>
-                    
-                    <button
-                      onClick={() => handleStartService(ticket.id)}
-                      disabled={currentTicket !== undefined || index !== 0 || isPaused}
-                      className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
-                        index === 0 && !currentTicket && !isPaused
-                          ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
-                    >
-                      {index === 0 && isPaused ? 'Reanudar primero' : index === 0 ? 'Atender' : 'Esperar turno'}
-                    </button>
+                    <div className="text-lg font-semibold text-gray-600">
+                      {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {ticket.createdAt.toLocaleTimeString()}
+                    </div>
+                    <div className="text-sm text-orange-600 font-medium">
+                      Esperando: {formatTime(waitTime)}
+                    </div>
+                    {ticket.derivedFrom && (
+                      <div className="text-sm text-purple-600 font-medium">
+                        Derivado desde: {state.employees.find(e => e.id === ticket.derivedFrom)?.name || 'Empleado'}
+                      </div>
+                    )}
                   </div>
+                  
+                  <button
+                    onClick={() => handleStartService(ticket.id)}
+                    disabled={currentTicket !== undefined || index !== 0 || isPaused}
+                    className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                      index === 0 && !currentTicket && !isPaused
+                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {index === 0 && isPaused ? 'Reanudar primero' : index === 0 ? 'Atender' : 'Esperar turno'}
+                  </button>
                 </div>
-              );
-            })}
-            
-            {waitingTickets.length === 0 && (
-              <div className="text-center py-12">
-                <Clock size={64} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-xl text-gray-500">No hay tickets en espera</p>
               </div>
-            )}
-          </div>
+            );
+          })}
+          
+          {waitingTickets.length === 0 && (
+            <div className="text-center py-12">
+              <Clock size={64} className="mx-auto text-gray-300 mb-4" />
+              <p className="text-xl text-gray-500">No hay tickets en espera</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -795,6 +773,14 @@ export default function EmpleadoUser() {
 
             {/* Action Buttons */}
             <div className="flex space-x-4">
+              <button
+                onClick={() => setShowProfileModal(true)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+              >
+                <Edit size={20} />
+                <span>Editar Perfil</span>
+              </button>
+              
               <button
                 onClick={() => setShowPasswordModal(true)}
                 className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2"
@@ -934,15 +920,143 @@ export default function EmpleadoUser() {
         </div>
       </div>
 
-      {/* Derive Ticket Modal */}
+      {/* Derive Ticket Modal - SIMPLIFIED VERSION */}
       {showDeriveModal && currentTicket && (
-        <EnhancedDeriveTicketModal
-          ticket={currentTicket}
-          employees={state.employees}
-          serviceCategories={state.serviceCategories}
-          onClose={() => setShowDeriveModal(false)}
-          onDerive={handleDeriveTicket}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center space-x-3 mb-6">
+              <ArrowRight size={32} className="text-purple-500" />
+              <h3 className="text-2xl font-bold text-gray-800">Derivar Ticket</h3>
+            </div>
+            
+            <div className="mb-6">
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-gray-800 mb-2">Ticket a Derivar:</h4>
+                <div className="text-lg font-bold text-purple-600">
+                  #{currentTicket.number.toString().padStart(3, '0')} - {currentTicket.serviceType.toUpperCase()}
+                </div>
+                <div className="text-sm text-gray-600">
+                  Creado: {currentTicket.createdAt.toLocaleTimeString()}
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                {/* Derive Type Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de Derivación
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        value="queue"
+                        checked={deriveType === 'queue'}
+                        onChange={(e) => setDeriveType(e.target.value as 'queue')}
+                        className="w-4 h-4 text-purple-600 border-gray-300 focus:ring-purple-500"
+                      />
+                      <div className="flex items-center space-x-2">
+                        <Users size={16} className="text-purple-600" />
+                        <span className="text-gray-700">Devolver a cola general</span>
+                      </div>
+                    </label>
+                    
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        value="employee"
+                        checked={deriveType === 'employee'}
+                        onChange={(e) => setDeriveType(e.target.value as 'employee')}
+                        className="w-4 h-4 text-purple-600 border-gray-300 focus:ring-purple-500"
+                      />
+                      <div className="flex items-center space-x-2">
+                        <User size={16} className="text-purple-600" />
+                        <span className="text-gray-700">Asignar a empleado específico</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Employee Selection */}
+                {deriveType === 'employee' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Empleado Destino
+                    </label>
+                    <select
+                      value={selectedEmployee}
+                      onChange={(e) => setSelectedEmployee(e.target.value)}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Seleccionar empleado</option>
+                      {state.employees.filter(emp => emp.isActive && emp.id !== currentEmployee?.id).map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.name} - {employee.position}
+                          {employee.currentTicketId ? ' (Ocupado)' : ' (Disponible)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Service Type Change */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Cambiar Tipo de Servicio (Opcional)
+                  </label>
+                  <select
+                    value={selectedServiceType}
+                    onChange={(e) => setSelectedServiceType(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    {state.serviceCategories.map((category) => (
+                      <option key={category.id} value={category.identifier.toLowerCase()}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Comment */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Comentario de Derivación (Opcional)
+                  </label>
+                  <textarea
+                    value={derivationComment}
+                    onChange={(e) => setDerivationComment(e.target.value)}
+                    placeholder="Motivo de la derivación..."
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeriveModal(false);
+                  setDeriveType('queue');
+                  setSelectedEmployee('');
+                  setSelectedServiceType('');
+                  setDerivationComment('');
+                }}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeriveTicket}
+                disabled={isLoading || (deriveType === 'employee' && !selectedEmployee)}
+                className="flex-1 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+              >
+                {isLoading ? 'Derivando...' : 'Derivar Ticket'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Cancel Ticket Modal */}
@@ -1086,6 +1200,73 @@ export default function EmpleadoUser() {
                 className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
               >
                 {isLoading ? 'Actualizando...' : 'Cambiar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Edit Modal */}
+      {showProfileModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center space-x-3 mb-6">
+              <Edit size={32} className="text-blue-500" />
+              <h3 className="text-2xl font-bold text-gray-800">Editar Perfil</h3>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre
+                </label>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Tu nombre completo"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre de Usuario
+                </label>
+                <input
+                  type="text"
+                  value={profileUsername}
+                  onChange={(e) => setProfileUsername(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Tu nombre de usuario"
+                />
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-600 text-sm">{error}</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowProfileModal(false);
+                  setError('');
+                  setProfileName(currentUser?.name || '');
+                  setProfileUsername(currentUser?.username || '');
+                }}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleUpdateProfile}
+                disabled={isLoading}
+                className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+              >
+                {isLoading ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
