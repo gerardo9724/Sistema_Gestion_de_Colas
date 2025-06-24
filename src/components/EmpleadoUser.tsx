@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, AlertTriangle, Key, Edit } from 'lucide-react';
+import { Coffee, AlertTriangle, Key } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { authService } from '../services/authService';
 import { ticketService } from '../services/ticketService';
@@ -9,11 +9,10 @@ import { employeeService } from '../services/employeeService';
 import EmployeeHeader from './employee/EmployeeHeader';
 import CurrentTicketCard from './employee/CurrentTicketCard';
 import QueueList from './employee/QueueList';
-import EmployeeStats from './employee/EmployeeStats';
 import EmployeeProfile from './employee/EmployeeProfile';
 import DeriveTicketModal from './employee/DeriveTicketModal';
 
-type TabType = 'queue' | 'profile' | 'stats';
+type TabType = 'queue' | 'profile'; // REMOVED: 'stats' - employees shouldn't see statistics
 
 export default function EmpleadoUser() {
   const { state, dispatch } = useApp();
@@ -23,27 +22,17 @@ export default function EmpleadoUser() {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
   const [showDeriveModal, setShowDeriveModal] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancellationComment, setCancellationComment] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [profileName, setProfileName] = useState('');
-  const [profileUsername, setProfileUsername] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
   const isPaused = currentEmployee?.isPaused || false;
-
-  useEffect(() => {
-    if (currentUser) {
-      setProfileName(currentUser.name);
-      setProfileUsername(currentUser.username || '');
-    }
-  }, [currentUser]);
 
   // Auto-pause employee on login
   useEffect(() => {
@@ -77,6 +66,7 @@ export default function EmpleadoUser() {
     dispatch({ type: 'LOGOUT' });
   };
 
+  // FIXED: Corrected toggle pause logic
   const handleTogglePause = async () => {
     if (!currentEmployee) return;
 
@@ -90,9 +80,13 @@ export default function EmpleadoUser() {
     }
     
     try {
+      // FIXED: Use the current state from the context, not the local state
+      const updatedEmployee = state.employees.find(e => e.id === currentEmployee.id);
+      if (!updatedEmployee) return;
+
       await employeeService.updateEmployee(currentEmployee.id, {
-        ...currentEmployee,
-        isPaused: !currentEmployee.isPaused
+        ...updatedEmployee,
+        isPaused: !updatedEmployee.isPaused // Use the current state from context
       });
     } catch (error) {
       console.error('Error toggling pause:', error);
@@ -334,50 +328,6 @@ export default function EmpleadoUser() {
     }
   };
 
-  const handleUpdateProfile = async () => {
-    if (!currentUser) return;
-
-    if (!profileName.trim()) {
-      setError('El nombre es requerido');
-      return;
-    }
-
-    if (!profileUsername.trim()) {
-      setError('El nombre de usuario es requerido');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const result = await authService.updateProfile(currentUser.id, {
-        name: profileName.trim(),
-        username: profileUsername.trim(),
-      });
-      
-      if (result.success) {
-        dispatch({ 
-          type: 'SET_CURRENT_USER', 
-          payload: { 
-            ...currentUser, 
-            name: profileName.trim(),
-            username: profileUsername.trim()
-          } 
-        });
-        
-        alert('Perfil actualizado correctamente');
-        setShowProfileModal(false);
-      } else {
-        setError(result.error || 'Error al actualizar perfil');
-      }
-    } catch (error) {
-      setError('Error interno del servidor');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const waitingTickets = state.tickets
     .filter(ticket => ticket.status === 'waiting')
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -386,9 +336,9 @@ export default function EmpleadoUser() {
     ticket.status === 'being_served' && ticket.servedBy === currentEmployee?.id
   );
 
+  // UPDATED: Removed 'stats' tab - employees shouldn't see statistics
   const tabs = [
     { id: 'queue', name: 'Cola de Tickets', icon: Coffee },
-    { id: 'stats', name: 'Estadísticas', icon: Coffee },
     { id: 'profile', name: 'Mi Perfil', icon: Coffee },
   ];
 
@@ -534,13 +484,12 @@ export default function EmpleadoUser() {
           {/* Main Content */}
           <div className="flex-1">
             {activeTab === 'queue' && renderQueue()}
-            {activeTab === 'stats' && <EmployeeStats employee={currentEmployee} />}
             {activeTab === 'profile' && (
               <EmployeeProfile
                 currentUser={currentUser}
                 currentEmployee={currentEmployee}
                 onChangePassword={() => setShowPasswordModal(true)}
-                onUpdateProfile={() => setShowProfileModal(true)}
+                onUpdateProfile={() => {}} // DISABLED: No profile editing for employees
               />
             )}
           </div>
@@ -699,73 +648,6 @@ export default function EmpleadoUser() {
                 className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
               >
                 {isLoading ? 'Actualizando...' : 'Cambiar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Profile Edit Modal */}
-      {showProfileModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center space-x-3 mb-6">
-              <Edit size={32} className="text-blue-500" />
-              <h3 className="text-2xl font-bold text-gray-800">Editar Perfil</h3>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre
-                </label>
-                <input
-                  type="text"
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Tu nombre completo"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre de Usuario
-                </label>
-                <input
-                  type="text"
-                  value={profileUsername}
-                  onChange={(e) => setProfileUsername(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Tu nombre de usuario"
-                />
-              </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-red-600 text-sm">{error}</p>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowProfileModal(false);
-                  setError('');
-                  setProfileName(currentUser?.name || '');
-                  setProfileUsername(currentUser?.username || '');
-                }}
-                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleUpdateProfile}
-                disabled={isLoading}
-                className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
-              >
-                {isLoading ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
