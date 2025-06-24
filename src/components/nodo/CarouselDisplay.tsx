@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React from 'react';
 import type { CarouselImage } from '../../types';
 
 interface CarouselDisplayProps {
@@ -25,65 +25,62 @@ export default function CarouselDisplay({
   scrollingSpeed
 }: CarouselDisplayProps) {
   
-  // CRITICAL: Memoize the scrolling title component to prevent re-renders
-  const ScrollingTitle = useMemo(() => {
+  // FIXED: Calculate animation duration for complete text display
+  const baseSpeed = 15; // Base speed in seconds
+  const speedMultiplier = (11 - scrollingSpeed) / 10; // Convert 1-10 scale to 0.1-1.0
+  const textLength = carouselTitle.length;
+  const lengthFactor = Math.max(1, textLength / 15); // Adjust for text length
+  const animationDuration = baseSpeed * speedMultiplier * lengthFactor;
+  
+  // SOLUTION: Scrolling text component with proper complete hiding
+  const ScrollingTitle = ({ text }: { text: string }) => {
     if (!enableScrollingText) {
-      return <span>{carouselTitle}</span>;
+      return <span>{text}</span>;
     }
 
-    // PERFECTED: Calculate animation duration for complete text scrolling
-    const baseSpeed = 10; // Optimized for smooth complete scrolling
-    const speedMultiplier = (11 - scrollingSpeed) / 10; // Convert 1-10 scale to 0.1-1.0
-    const textLength = carouselTitle.length;
-    const lengthFactor = Math.max(1, textLength / 10); // Adjusted for complete scrolling
-    const animationDuration = baseSpeed * speedMultiplier * lengthFactor;
-    
-    // Generate unique animation name to avoid conflicts
-    const animationName = `scroll-complete-${Math.random().toString(36).substr(2, 9)}`;
-
     return (
-      <div className="overflow-hidden whitespace-nowrap relative w-full">
+      <div 
+        className="relative w-full overflow-hidden"
+        style={{ height: '1.5rem' }} // Fixed height to prevent layout shifts
+      >
+        {/* CRITICAL: Container that ensures text starts and ends completely hidden */}
         <div 
-          className="inline-block"
+          className="absolute top-0 whitespace-nowrap"
           style={{
-            animation: `${animationName} ${animationDuration}s linear infinite`,
+            left: '100%', // Start completely outside (right)
+            animation: `scrollText ${animationDuration}s linear infinite`,
           }}
         >
-          {carouselTitle}
+          {text}
         </div>
-        <style jsx>{`
-          @keyframes ${animationName} {
-            0% {
-              transform: translateX(100%);
+        
+        {/* GLOBAL CSS for scrolling animation - injected once */}
+        <style dangerouslySetInnerHTML={{
+          __html: `
+            @keyframes scrollText {
+              0% {
+                left: 100%;
+              }
+              70% {
+                left: -100%;
+              }
+              100% {
+                left: -100%;
+              }
             }
-            75% {
-              transform: translateX(-100%);
-            }
-            100% {
-              transform: translateX(-100%);
-            }
-          }
-        `}</style>
+          `
+        }} />
       </div>
     );
-  }, [carouselTitle, enableScrollingText, scrollingSpeed]); // Only re-create when these specific props change
-
-  // Memoize the current image to prevent unnecessary re-renders
-  const currentImage = useMemo(() => {
-    return images[currentImageIndex];
-  }, [images, currentImageIndex]);
-
-  // Memoize the error handler to prevent re-creation on every render
-  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y3ZjdmNyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZW4gbm8gZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=';
-  }, []);
-
+  };
+  
   if (images.length === 0) {
     return (
       <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
+        {/* Title takes full width for scrolling validation */}
         <div className="w-full mb-3">
           <h2 className="text-xl font-bold text-center w-full" style={{ color: textColor }}>
-            {ScrollingTitle}
+            <ScrollingTitle text={carouselTitle} />
           </h2>
         </div>
         
@@ -98,16 +95,18 @@ export default function CarouselDisplay({
     );
   }
 
+  const currentImage = images[currentImageIndex];
+
   return (
     <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-2xl shadow-2xl p-4 h-full flex flex-col">
-      {/* STABLE: Title container with memoized scrolling component */}
+      {/* OPTIMIZED: Reduced title container height for more image space */}
       <div className="w-full mb-2">
         <h2 className="text-lg font-bold text-center w-full" style={{ color: textColor }}>
-          {ScrollingTitle}
+          <ScrollingTitle text={carouselTitle} />
         </h2>
       </div>
       
-      {/* Image container */}
+      {/* ENHANCED: Image container now uses maximum available space with better proportions */}
       <div className="flex-1 flex items-center justify-center min-h-0">
         <div className="relative w-[95%] h-[98%] rounded-2xl overflow-hidden shadow-2xl">
           <img
@@ -117,15 +116,17 @@ export default function CarouselDisplay({
               enableAnimations ? 'transition-all duration-1000 transform hover:scale-105' : ''
             }`}
             style={{
-              objectFit: 'cover',
+              objectFit: 'cover', // Ensures aspect ratio is preserved while filling container
             }}
-            onError={handleImageError}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y3ZjdmNyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZW4gbm8gZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=';
+            }}
           />
           
-          {/* Overlay with gradient */}
+          {/* Overlay with gradient - OPTIMIZED for better image visibility */}
           <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-50"></div>
           
-          {/* Image name overlay */}
+          {/* Image name overlay - REPOSITIONED for better space usage */}
           {showImageDescriptions && (
             <div className="absolute bottom-4 left-4 right-4">
               <h3 className="text-xl font-bold text-white drop-shadow-2xl">
@@ -139,7 +140,7 @@ export default function CarouselDisplay({
             </div>
           )}
           
-          {/* Image indicators */}
+          {/* Image indicators - REPOSITIONED to avoid overlap */}
           {showImageIndicators && (
             <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1.5">
               {images.map((_, index) => (
@@ -157,7 +158,7 @@ export default function CarouselDisplay({
             </div>
           )}
 
-          {/* Auto-rotation indicator */}
+          {/* Auto-rotation indicator - REPOSITIONED and RESIZED */}
           <div className="absolute top-2 right-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded-full text-xs font-medium backdrop-blur-sm">
             {currentImageIndex + 1} / {images.length}
           </div>
