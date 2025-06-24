@@ -148,7 +148,7 @@ export default function QueueDisplay({
           </div>
         </div>
 
-        {/* Next in Queue - FURTHER OPTIMIZED AND COMPACT */}
+        {/* Next in Queue - REMOVED "SIGUIENTE" TEXT */}
         {showQueueInfo && (
           <div className="flex-shrink-0">
             <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-2 border border-gray-200 shadow-sm">
@@ -177,11 +177,7 @@ export default function QueueDisplay({
                       }`}>
                         #{ticket.number.toString().padStart(3, '0')}
                       </div>
-                      {index === 0 && (
-                        <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} text-yellow-800 font-semibold`}>
-                          SIGUIENTE
-                        </div>
-                      )}
+                      {/* REMOVED: "SIGUIENTE" text - now only shows ticket number */}
                     </div>
                   );
                 })}
