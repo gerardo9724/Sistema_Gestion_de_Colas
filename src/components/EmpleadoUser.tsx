@@ -195,6 +195,34 @@ export default function EmpleadoUser() {
     }
   };
 
+  // FIXED: Handle ticket recall (call client again in the node) - NO POPUP
+  const handleRecallTicket = async () => {
+    if (!currentEmployee) return;
+
+    const currentTicket = state.tickets.find(t => 
+      t.status === 'being_served' && t.servedBy === currentEmployee.id
+    );
+
+    if (!currentTicket) {
+      console.warn('No hay ticket en atención para volver a llamar');
+      return;
+    }
+
+    try {
+      console.log('🔊 Recalling ticket:', currentTicket.number);
+      
+      // FIXED: Update the ticket's servedAt time to trigger a new announcement
+      // This will cause the AudioManager to detect it as a "newly served" ticket
+      await ticketService.updateTicket(currentTicket.id, {
+        servedAt: new Date() // This timestamp change triggers the audio system
+      });
+
+      console.log('✅ Ticket recall triggered successfully');
+    } catch (error) {
+      console.error('❌ Error recalling ticket:', error);
+    }
+  };
+
   const handleCancelTicket = async () => {
     if (!currentEmployee) return;
 
@@ -243,32 +271,6 @@ export default function EmpleadoUser() {
     } catch (error) {
       console.error('Error cancelling ticket:', error);
       alert('Error al cancelar el ticket');
-    }
-  };
-
-  // NEW: Handle ticket recall (call client again in the node)
-  const handleRecallTicket = async () => {
-    if (!currentEmployee) return;
-
-    const currentTicket = state.tickets.find(t => 
-      t.status === 'being_served' && t.servedBy === currentEmployee.id
-    );
-
-    if (!currentTicket) {
-      alert('No hay ticket en atención para volver a llamar');
-      return;
-    }
-
-    try {
-      // Update the ticket's servedAt time to trigger a new announcement
-      await ticketService.updateTicket(currentTicket.id, {
-        servedAt: new Date() // This will trigger the audio system to announce again
-      });
-
-      alert('Cliente llamado nuevamente. El anuncio se reproducirá en el módulo nodo.');
-    } catch (error) {
-      console.error('Error recalling ticket:', error);
-      alert('Error al volver a llamar el cliente');
     }
   };
 
@@ -399,7 +401,7 @@ export default function EmpleadoUser() {
                 </div>
               </div>
               
-              {/* NEW: Added Recall Button */}
+              {/* FIXED: Added Recall Button - NO POPUP */}
               <div className="mb-4">
                 <button
                   onClick={handleRecallTicket}
