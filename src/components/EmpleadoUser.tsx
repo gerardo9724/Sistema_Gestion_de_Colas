@@ -42,6 +42,8 @@ export default function EmpleadoUser() {
   
   // CRITICAL: Track the original service start time to prevent timer resets on recalls
   const [originalServiceStartTime, setOriginalServiceStartTime] = useState<Date | null>(null);
+  // FIXED: Add a flag to track if we've already initialized the timer for this ticket
+  const [currentTicketId, setCurrentTicketId] = useState<string | null>(null);
 
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
@@ -71,16 +73,20 @@ export default function EmpleadoUser() {
         console.log('✅ Found active ticket for employee:', {
           ticketNumber: activeTicket.number,
           servedAt: activeTicket.servedAt,
-          employeeName: currentEmployee.name
+          employeeName: currentEmployee.name,
+          currentTicketId: currentTicketId,
+          activeTicketId: activeTicket.id
         });
         
-        if (activeTicket.servedAt) {
-          const servedTime = new Date(activeTicket.servedAt);
+        // CRITICAL: Only initialize timer if this is a NEW ticket (different from current)
+        if (activeTicket.id !== currentTicketId) {
+          console.log('🆕 NEW TICKET DETECTED - Initializing timer for ticket:', activeTicket.id);
           
-          // CRITICAL: Only update timer if we don't have an original start time yet
-          // This prevents timer resets when servedAt is updated for recalls
-          if (!originalServiceStartTime) {
-            console.log('🕐 Setting ORIGINAL service start time (first time):', servedTime);
+          if (activeTicket.servedAt) {
+            const servedTime = new Date(activeTicket.servedAt);
+            
+            console.log('🕐 Setting ORIGINAL service start time for NEW ticket:', servedTime);
+            setCurrentTicketId(activeTicket.id);
             setOriginalServiceStartTime(servedTime);
             setServiceStartTime(servedTime);
             setIsTimerRunning(true);
@@ -89,40 +95,40 @@ export default function EmpleadoUser() {
             const elapsed = Math.floor((new Date().getTime() - servedTime.getTime()) / 1000);
             setElapsedTime(elapsed);
             
-            console.log('🔄 Employee state restored successfully:', {
+            console.log('🔄 Timer initialized for NEW ticket:', {
+              ticketId: activeTicket.id,
               serviceStartTime: servedTime,
               elapsedTime: elapsed,
               isTimerRunning: true
             });
-          } else {
-            // FIXED: If we already have an original start time, don't reset the timer
-            // This happens when servedAt is updated for recalls
-            console.log('⏰ RECALL DETECTED - Keeping original timer:', {
-              originalStartTime: originalServiceStartTime,
-              newServedAt: servedTime,
-              timerWillNotReset: true
-            });
-            
+          }
+        } else {
+          // FIXED: Same ticket - this is likely a RECALL, don't reset timer
+          console.log('🔄 SAME TICKET - This is likely a RECALL, preserving timer');
+          
+          if (originalServiceStartTime) {
             // Keep using the original start time for timer calculation
             const elapsed = Math.floor((new Date().getTime() - originalServiceStartTime.getTime()) / 1000);
             setElapsedTime(elapsed);
             
             // Ensure timer is still running
             if (!isTimerRunning) {
+              console.log('⏰ Restarting timer for existing ticket');
               setIsTimerRunning(true);
             }
           }
         }
       } else {
-        console.log('ℹ️ No active ticket found for employee');
+        console.log('ℹ️ No active ticket found for employee - Resetting timer state');
         // Reset timer state if no active ticket
+        setCurrentTicketId(null);
         setServiceStartTime(null);
-        setOriginalServiceStartTime(null); // CRITICAL: Reset original time too
+        setOriginalServiceStartTime(null);
         setElapsedTime(0);
         setIsTimerRunning(false);
       }
     }
-  }, [currentEmployee?.id, state.tickets, originalServiceStartTime, isTimerRunning]); // Added originalServiceStartTime to dependencies
+  }, [currentEmployee?.id, state.tickets, currentTicketId, originalServiceStartTime, isTimerRunning]);
 
   // FIXED: Update employee's currentTicketId when ticket state changes
   useEffect(() => {
@@ -227,6 +233,8 @@ export default function EmpleadoUser() {
       });
 
       // CRITICAL: Set both original and current service start time for new tickets
+      console.log('🆕 Starting NEW ticket service - Setting original timer:', now);
+      setCurrentTicketId(ticketId);
       setOriginalServiceStartTime(now);
       setServiceStartTime(now);
       setElapsedTime(0);
@@ -261,7 +269,9 @@ export default function EmpleadoUser() {
         isPaused: !callNext
       });
       
-      // CRITICAL: Reset both original and current service start time
+      // CRITICAL: Reset all timer state
+      console.log('✅ Ticket completed - Resetting all timer state');
+      setCurrentTicketId(null);
       setOriginalServiceStartTime(null);
       setServiceStartTime(null);
       setElapsedTime(0);
@@ -292,9 +302,10 @@ export default function EmpleadoUser() {
     try {
       console.log('🔊 Recalling ticket:', currentTicket.number);
       console.log('⏰ IMPORTANT: Timer will NOT reset - using original start time:', originalServiceStartTime);
+      console.log('🎯 Current ticket ID tracked:', currentTicketId);
       
       // FIXED: Update the ticket's servedAt time to trigger a new announcement
-      // The timer logic now prevents resets by using originalServiceStartTime
+      // The timer logic now prevents resets by using originalServiceStartTime and currentTicketId tracking
       await ticketService.updateTicket(currentTicket.id, {
         servedAt: new Date() // This timestamp change triggers the audio system but won't reset timer
       });
@@ -351,7 +362,9 @@ export default function EmpleadoUser() {
         isPaused: true
       });
 
-      // CRITICAL: Reset both original and current service start time
+      // CRITICAL: Reset all timer state
+      console.log('📤 Ticket derived - Resetting all timer state');
+      setCurrentTicketId(null);
       setOriginalServiceStartTime(null);
       setServiceStartTime(null);
       setElapsedTime(0);
@@ -397,7 +410,9 @@ export default function EmpleadoUser() {
         isPaused: true
       });
 
-      // CRITICAL: Reset both original and current service start time
+      // CRITICAL: Reset all timer state
+      console.log('❌ Ticket cancelled - Resetting all timer state');
+      setCurrentTicketId(null);
       setOriginalServiceStartTime(null);
       setServiceStartTime(null);
       setElapsedTime(0);
