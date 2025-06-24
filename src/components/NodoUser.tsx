@@ -12,6 +12,7 @@ export default function NodoUser() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [highlightedTicket, setHighlightedTicket] = useState<string | null>(null);
   const [lastAnnouncedTicket, setLastAnnouncedTicket] = useState<string | null>(null);
+  const [lastResetDate, setLastResetDate] = useState<string>(''); // NEW: Track last reset date
 
   // CRITICAL: Get node configuration from independent Firebase table
   const nodeConfig = React.useMemo(() => {
@@ -43,7 +44,7 @@ export default function NodoUser() {
         textColor: state.nodeConfiguration.textColor,
         accentColor: state.nodeConfiguration.accentColor,
         
-        // NEW: Ticket Color Settings
+        // Ticket Color Settings
         ticketBeingServedColor: state.nodeConfiguration.ticketBeingServedColor || '#10B981',
         ticketCompletedColor: state.nodeConfiguration.ticketCompletedColor || '#14B8A6',
         
@@ -84,8 +85,8 @@ export default function NodoUser() {
         headerColor: '#3B82F6',
         textColor: '#1F2937',
         accentColor: '#10B981',
-        ticketBeingServedColor: '#10B981', // Default green
-        ticketCompletedColor: '#14B8A6', // Default teal
+        ticketBeingServedColor: '#10B981',
+        ticketCompletedColor: '#14B8A6',
         enableAnimations: true,
         highlightDuration: 10000,
         transitionDuration: 1000,
@@ -98,6 +99,51 @@ export default function NodoUser() {
       };
     }
   }, [state.nodeConfiguration]);
+
+  // NEW: Daily reset functionality - Check for new day and reset visual state
+  useEffect(() => {
+    const checkForNewDay = () => {
+      const today = new Date().toDateString(); // Get current date as string (e.g., "Mon Jan 01 2024")
+      
+      // Check if it's a new day
+      if (lastResetDate && lastResetDate !== today) {
+        console.log('🌅 NEW DAY DETECTED - Performing visual reset for nodo module');
+        console.log('Previous date:', lastResetDate);
+        console.log('Current date:', today);
+        
+        // VISUAL RESET: Clear all visual states for new day
+        setHighlightedTicket(null);
+        setLastAnnouncedTicket(null);
+        
+        // Reset carousel to first image
+        setCurrentImageIndex(0);
+        
+        console.log('✅ Visual reset completed for new day');
+      }
+      
+      // Update the last reset date
+      if (lastResetDate !== today) {
+        setLastResetDate(today);
+        
+        // Store in localStorage to persist across page reloads
+        localStorage.setItem('nodo_last_reset_date', today);
+      }
+    };
+
+    // Initialize from localStorage on component mount
+    const storedResetDate = localStorage.getItem('nodo_last_reset_date');
+    if (storedResetDate) {
+      setLastResetDate(storedResetDate);
+    }
+
+    // Check immediately
+    checkForNewDay();
+
+    // Set up interval to check every minute for new day
+    const resetCheckInterval = setInterval(checkForNewDay, 60000); // Check every minute
+
+    return () => clearInterval(resetCheckInterval);
+  }, [lastResetDate]);
 
   // Update time every second
   useEffect(() => {
@@ -125,28 +171,50 @@ export default function NodoUser() {
     dispatch({ type: 'SET_CURRENT_USER', payload: null });
   };
 
-  // CRITICAL UPDATED: Get ALL tickets (being served AND completed today) for proper display
+  // ENHANCED: Get tickets for display with daily filtering
   const getAllTicketsForDisplay = () => {
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     
-    // Get being served tickets
-    const beingServedTickets = state.tickets
+    console.log('📅 Filtering tickets for today:', {
+      startOfDay: startOfDay.toISOString(),
+      endOfDay: endOfDay.toISOString(),
+      totalTickets: state.tickets.length
+    });
+    
+    // CRITICAL: Only show tickets from TODAY
+    const todaysTickets = state.tickets.filter(ticket => {
+      const ticketDate = new Date(ticket.createdAt);
+      const isToday = ticketDate >= startOfDay && ticketDate < endOfDay;
+      
+      if (!isToday) {
+        console.log('🗑️ Filtering out old ticket:', {
+          ticketNumber: ticket.number,
+          createdAt: ticket.createdAt,
+          isFromToday: isToday
+        });
+      }
+      
+      return isToday;
+    });
+    
+    // Get being served tickets (only from today)
+    const beingServedTickets = todaysTickets
       .filter(ticket => ticket.status === 'being_served')
       .sort((a, b) => {
-        // CRITICAL: Highlighted ticket (newly called) ALWAYS goes first (top position)
+        // Highlighted ticket (newly called) ALWAYS goes first
         if (highlightedTicket === a.id && highlightedTicket !== b.id) return -1;
         if (highlightedTicket === b.id && highlightedTicket !== a.id) return 1;
         
         // For non-highlighted tickets, sort by served time - MOST RECENT FIRST
         const aTime = a.servedAt ? new Date(a.servedAt).getTime() : 0;
         const bTime = b.servedAt ? new Date(b.servedAt).getTime() : 0;
-        return bTime - aTime; // Most recent (last called) first, then older ones below
+        return bTime - aTime;
       });
 
     // Get today's completed tickets
-    const todaysCompletedTickets = state.tickets
+    const todaysCompletedTickets = todaysTickets
       .filter(ticket => 
         ticket.status === 'completed' && 
         ticket.completedAt &&
@@ -157,22 +225,39 @@ export default function NodoUser() {
         // Sort completed tickets by completion time - MOST RECENT FIRST
         const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
         const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
-        return bTime - aTime; // Most recently completed first
+        return bTime - aTime;
       });
 
-    // CRITICAL: Combine following the scenario ordering:
-    // 1. Being served tickets (with highlighted first)
-    // 2. Today's completed tickets (most recent first)
-    return [...beingServedTickets, ...todaysCompletedTickets];
+    const combinedTickets = [...beingServedTickets, ...todaysCompletedTickets];
+    
+    console.log('📊 Today\'s tickets for display:', {
+      beingServed: beingServedTickets.length,
+      completed: todaysCompletedTickets.length,
+      total: combinedTickets.length,
+      maxToShow: nodeConfig.maxTicketsDisplayed
+    });
+
+    return combinedTickets;
   };
 
   const allTicketsForDisplay = getAllTicketsForDisplay();
 
-  // Get next tickets in queue - limited to 2 only
-  const waitingTickets = state.tickets
-    .filter(ticket => ticket.status === 'waiting')
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    .slice(0, 2);
+  // Get next tickets in queue - only from today
+  const waitingTickets = (() => {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    
+    return state.tickets
+      .filter(ticket => {
+        const ticketDate = new Date(ticket.createdAt);
+        return ticket.status === 'waiting' && 
+               ticketDate >= startOfDay && 
+               ticketDate < endOfDay;
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .slice(0, 2);
+  })();
 
   // Apply custom styles from configuration
   const customStyles = {
@@ -180,7 +265,7 @@ export default function NodoUser() {
     color: nodeConfig.textColor,
   };
 
-  // Calculate content height to maintain original aspect - always reserve space for status bar
+  // Calculate content height to maintain original aspect
   const contentHeight = nodeConfig.showHeader ? 'h-[calc(100vh-120px)]' : 'h-[calc(100vh-40px)]';
 
   // Calculate layout based on carousel visibility
@@ -214,16 +299,16 @@ export default function NodoUser() {
         {/* Queue Information - DYNAMIC WIDTH BASED ON CAROUSEL VISIBILITY */}
         <div className={`${queueWidth} p-3 transition-all duration-500`}>
           <QueueDisplay
-            beingServedTickets={allTicketsForDisplay} // UPDATED: Pass all tickets (being served + completed today)
-            waitingTickets={waitingTickets}
+            beingServedTickets={allTicketsForDisplay} // Only today's tickets
+            waitingTickets={waitingTickets} // Only today's waiting tickets
             employees={state.employees}
             highlightedTicket={highlightedTicket}
             maxTicketsDisplayed={nodeConfig.maxTicketsDisplayed}
             showQueueInfo={nodeConfig.showQueueInfo}
             textColor={nodeConfig.textColor}
             accentColor={nodeConfig.accentColor}
-            ticketBeingServedColor={nodeConfig.ticketBeingServedColor} // NEW: Pass configurable color
-            ticketCompletedColor={nodeConfig.ticketCompletedColor} // NEW: Pass configurable color
+            ticketBeingServedColor={nodeConfig.ticketBeingServedColor}
+            ticketCompletedColor={nodeConfig.ticketCompletedColor}
             enableAnimations={nodeConfig.enableAnimations}
             isFullWidth={!nodeConfig.showCarousel}
           />
@@ -252,7 +337,16 @@ export default function NodoUser() {
         <div className="fixed bottom-0 left-0 right-0">
           <StatusBar
             waitingTicketsCount={waitingTickets.length}
-            beingServedTicketsCount={state.tickets.filter(t => t.status === 'being_served').length} // Only count being served
+            beingServedTicketsCount={state.tickets.filter(t => {
+              const today = new Date();
+              const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+              const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+              const ticketDate = new Date(t.createdAt);
+              
+              return t.status === 'being_served' && 
+                     ticketDate >= startOfDay && 
+                     ticketDate < endOfDay;
+            }).length} // Only count today's being served tickets
             activeEmployeesCount={state.employees.filter(e => e.isActive && !e.isPaused).length}
             currentTime={currentTime}
             audioEnabled={nodeConfig.enableAudio}
@@ -276,6 +370,13 @@ export default function NodoUser() {
         speechRate={nodeConfig.speechRate}
         highlightDuration={nodeConfig.highlightDuration}
       />
+
+      {/* NEW: Daily Reset Indicator (only visible in development/debug mode) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed top-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs font-mono z-50">
+          Reset: {lastResetDate || 'Initializing...'}
+        </div>
+      )}
     </div>
   );
 }
