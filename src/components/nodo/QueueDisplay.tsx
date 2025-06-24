@@ -130,11 +130,11 @@ export default function QueueDisplay({
                     height: ticketHeight,
                     minHeight: minTicketHeight,
                     maxHeight: '80px',
-                    // FIXED: Different color for completed tickets - muted gray instead of green
-                    backgroundColor: isCompleted ? '#6B7280' : accentColor, // Gray for completed, accent for being served
-                    borderColor: isCompleted ? '#6B7280' : accentColor,
+                    // UPDATED: Better color for completed tickets - soft teal instead of gray
+                    backgroundColor: isCompleted ? '#14B8A6' : accentColor, // Teal for completed, accent for being served
+                    borderColor: isCompleted ? '#14B8A6' : accentColor,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                    opacity: isCompleted ? 0.7 : 1 // More transparent for completed tickets
+                    opacity: isCompleted ? 0.85 : 1 // Slightly transparent for completed tickets
                   }}
                 >
                   {/* FIXED: Internal highlight effects - NO box resizing, only content animation */}
@@ -150,7 +150,12 @@ export default function QueueDisplay({
                     </>
                   )}
 
-                  {/* REMOVED: Completed ticket indicator - no check icon or completion time */}
+                  {/* NEW: Check icon for completed tickets */}
+                  {isCompleted && (
+                    <div className="absolute top-1 right-1 bg-white bg-opacity-90 rounded-full p-1 z-30">
+                      <CheckCircle size={16} className="text-teal-600" />
+                    </div>
+                  )}
                   
                   {/* FIXED: SIMPLIFIED ticket content - ONLY basic info */}
                   <div className={`relative z-20 flex items-center justify-between w-full text-white ${
@@ -172,7 +177,6 @@ export default function QueueDisplay({
                       <div className="text-base font-bold drop-shadow">
                         {employee?.name || 'N/A'}
                       </div>
-                      {/* REMOVED: Completion time display */}
                     </div>
                     
                     {/* Right side - ONLY Service area */}
