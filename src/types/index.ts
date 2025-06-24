@@ -114,8 +114,7 @@ export interface NodeConfiguration {
   showDateTime: boolean;
   showConnectionStatus: boolean;
   showHeader: boolean; // Option to show/hide header
-  showCarousel: boolean; // Option to show/hide carousel
-  showStatusBar: boolean; // NEW: Option to show/hide status bar
+  showCarousel: boolean; // NEW: Option to show/hide carousel
   compactMode: boolean;
   
   // Audio Settings
@@ -140,7 +139,7 @@ export interface NodeConfiguration {
   showImageIndicators: boolean;
   pauseOnHover: boolean;
   
-  // Carousel Text Settings
+  // NEW: Carousel Text Settings
   carouselTitle: string; // Customizable carousel title
   enableScrollingText: boolean; // Enable scrolling text animation
   scrollingSpeed: number; // Speed of scrolling animation (1-10)

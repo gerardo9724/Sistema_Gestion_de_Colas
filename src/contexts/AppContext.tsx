@@ -19,7 +19,7 @@ const initialState: AppState = {
   users: [],
   computerProfiles: [],
   systemSettings: null,
-  nodeConfiguration: null, // Independent node configuration
+  nodeConfiguration: null, // NEW: Independent node configuration
   carouselImages: [],
   ticketTemplates: [],
   cancellationReasons: [],
@@ -51,7 +51,7 @@ type AppAction =
   | { type: 'SET_USERS'; payload: User[] }
   | { type: 'SET_COMPUTER_PROFILES'; payload: ComputerProfile[] }
   | { type: 'SET_SYSTEM_SETTINGS'; payload: SystemSettings | null }
-  | { type: 'SET_NODE_CONFIGURATION'; payload: NodeConfiguration | null }
+  | { type: 'SET_NODE_CONFIGURATION'; payload: NodeConfiguration | null } // NEW
   | { type: 'SET_CAROUSEL_IMAGES'; payload: CarouselImage[] }
   | { type: 'ADD_TICKET'; payload: Ticket }
   | { type: 'SET_CURRENT_USER'; payload: User | null }
@@ -93,7 +93,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_SYSTEM_SETTINGS':
       return { ...state, systemSettings: action.payload };
     
-    case 'SET_NODE_CONFIGURATION':
+    case 'SET_NODE_CONFIGURATION': // NEW
       return { ...state, nodeConfiguration: action.payload };
     
     case 'SET_CAROUSEL_IMAGES':
@@ -135,7 +135,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
         printSettings: state.printSettings,
         currentComputerProfile: state.currentComputerProfile,
         systemSettings: state.systemSettings,
-        nodeConfiguration: state.nodeConfiguration,
+        nodeConfiguration: state.nodeConfiguration, // NEW
       };
     
     default:
@@ -151,8 +151,8 @@ const AppContext = createContext<{
   loadInitialData: () => Promise<void>;
   checkComputerProfile: () => Promise<void>;
   updateSystemSettings: (updates: Partial<SystemSettings>) => Promise<void>;
-  updateNodeConfiguration: (updates: Partial<NodeConfiguration>) => Promise<void>;
-  saveCompleteNodeConfiguration: (config: Partial<NodeConfiguration>) => Promise<void>;
+  updateNodeConfiguration: (updates: Partial<NodeConfiguration>) => Promise<void>; // NEW
+  saveCompleteNodeConfiguration: (config: Partial<NodeConfiguration>) => Promise<void>; // NEW
   updatePrintSettings: (settings: Partial<PrintSettings>) => void;
   testPrint: () => Promise<boolean>;
   previewTicket: (ticket: Ticket) => void;
@@ -215,7 +215,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_SYSTEM_SETTINGS', payload: settings });
     });
 
-    // Subscribe to node configuration
+    // NEW: Subscribe to node configuration
     const unsubscribeNodeConfiguration = nodeConfigurationService.subscribeToNodeConfiguration((config) => {
       dispatch({ type: 'SET_NODE_CONFIGURATION', payload: config });
     });
@@ -233,7 +233,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubscribeUsers();
       unsubscribeComputerProfiles();
       unsubscribeSystemSettings();
-      unsubscribeNodeConfiguration();
+      unsubscribeNodeConfiguration(); // NEW
       unsubscribeCarousel();
     };
   }, [state.isFirebaseConnected]);
@@ -306,7 +306,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         userService.getAllUsers(),
         computerProfileService.getAllComputerProfiles(),
         systemSettingsService.getSystemSettings(),
-        nodeConfigurationService.getNodeConfiguration(),
+        nodeConfigurationService.getNodeConfiguration(), // NEW
         carouselService.getAllCarouselImages(),
       ]);
 
@@ -316,7 +316,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_USERS', payload: users });
       dispatch({ type: 'SET_COMPUTER_PROFILES', payload: computerProfiles });
       dispatch({ type: 'SET_SYSTEM_SETTINGS', payload: systemSettings });
-      dispatch({ type: 'SET_NODE_CONFIGURATION', payload: nodeConfiguration });
+      dispatch({ type: 'SET_NODE_CONFIGURATION', payload: nodeConfiguration }); // NEW
       dispatch({ type: 'SET_CAROUSEL_IMAGES', payload: carouselImages });
 
       console.log('Initial data loaded successfully');
@@ -342,7 +342,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Update node configuration
+  // NEW: Update node configuration
   const updateNodeConfiguration = async (updates: Partial<NodeConfiguration>) => {
     try {
       const existingConfig = state.nodeConfiguration;
@@ -358,7 +358,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Save complete node configuration
+  // NEW: Save complete node configuration
   const saveCompleteNodeConfiguration = async (config: Partial<NodeConfiguration>) => {
     try {
       await nodeConfigurationService.saveCompleteConfiguration(config);
@@ -449,8 +449,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadInitialData,
       checkComputerProfile,
       updateSystemSettings,
-      updateNodeConfiguration,
-      saveCompleteNodeConfiguration,
+      updateNodeConfiguration, // NEW
+      saveCompleteNodeConfiguration, // NEW
       updatePrintSettings,
       testPrint,
       previewTicket,

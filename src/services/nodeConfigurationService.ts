@@ -36,8 +36,7 @@ const convertFirestoreNodeConfiguration = (doc: any): NodeConfiguration => {
     showDateTime: data.showDateTime ?? true,
     showConnectionStatus: data.showConnectionStatus ?? true,
     showHeader: data.showHeader ?? true,
-    showCarousel: data.showCarousel ?? true,
-    showStatusBar: data.showStatusBar ?? true, // NEW: Status bar visibility
+    showCarousel: data.showCarousel ?? true, // NEW: Carousel visibility
     compactMode: data.compactMode ?? false,
     
     // Audio Settings
@@ -62,7 +61,7 @@ const convertFirestoreNodeConfiguration = (doc: any): NodeConfiguration => {
     showImageIndicators: data.showImageIndicators ?? true,
     pauseOnHover: data.pauseOnHover ?? false,
     
-    // Carousel Text Settings
+    // NEW: Carousel Text Settings
     carouselTitle: data.carouselTitle || 'Publicidad',
     enableScrollingText: data.enableScrollingText ?? false,
     scrollingSpeed: data.scrollingSpeed || 5,
@@ -113,8 +112,7 @@ export const nodeConfigurationService = {
         showDateTime: true,
         showConnectionStatus: true,
         showHeader: true,
-        showCarousel: true,
-        showStatusBar: true, // NEW: Default to show status bar
+        showCarousel: true, // NEW: Default to show carousel
         compactMode: false,
         
         // Audio Settings
@@ -139,7 +137,7 @@ export const nodeConfigurationService = {
         showImageIndicators: true,
         pauseOnHover: false,
         
-        // Carousel Text Settings
+        // NEW: Carousel Text Settings
         carouselTitle: 'Publicidad',
         enableScrollingText: false,
         scrollingSpeed: 5,
@@ -239,8 +237,7 @@ export const nodeConfigurationService = {
           showDateTime: config.showDateTime ?? true,
           showConnectionStatus: config.showConnectionStatus ?? true,
           showHeader: config.showHeader ?? true,
-          showCarousel: config.showCarousel ?? true,
-          showStatusBar: config.showStatusBar ?? true, // NEW: Status bar visibility
+          showCarousel: config.showCarousel ?? true, // NEW: Carousel visibility
           compactMode: config.compactMode ?? false,
           
           // Audio Settings
@@ -265,7 +262,7 @@ export const nodeConfigurationService = {
           showImageIndicators: config.showImageIndicators ?? true,
           pauseOnHover: config.pauseOnHover ?? false,
           
-          // Carousel Text Settings
+          // NEW: Carousel Text Settings
           carouselTitle: config.carouselTitle || 'Publicidad',
           enableScrollingText: config.enableScrollingText ?? false,
           scrollingSpeed: config.scrollingSpeed || 5,
