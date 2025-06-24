@@ -109,12 +109,8 @@ export default function EmpleadoUser() {
     dispatch({ type: 'LOGOUT' });
   };
 
-  // FIXED: Simplified and improved toggle pause function
   const handleTogglePause = async () => {
-    if (!currentEmployee) {
-      console.error('❌ No current employee found');
-      return;
-    }
+    if (!currentEmployee) return;
 
     const currentTicket = state.tickets.find(t => 
       t.status === 'being_served' && t.servedBy === currentEmployee.id
@@ -125,73 +121,14 @@ export default function EmpleadoUser() {
       return;
     }
     
-    setIsLoading(true);
-    
     try {
-      const newPausedState = !currentEmployee.isPaused;
-      
-      console.log('🔄 Toggling pause state:', {
-        employeeId: currentEmployee.id,
-        employeeName: currentEmployee.name,
-        currentPaused: currentEmployee.isPaused,
-        newPaused: newPausedState,
-        queueStats
-      });
-
-      // STEP 1: Update employee pause state first
       await employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
-        isPaused: newPausedState
+        isPaused: !currentEmployee.isPaused
       });
-
-      console.log('✅ Employee pause state updated successfully');
-
-      // STEP 2: If resuming (unpausing), try to auto-assign next ticket
-      if (currentEmployee.isPaused && !newPausedState) {
-        console.log('▶️ Employee resuming - checking for available tickets...');
-        
-        // Check if there are tickets available
-        if (queueStats.totalWaitingCount > 0) {
-          console.log('📋 Tickets available, attempting auto-assignment...');
-          
-          try {
-            // Use a small delay to ensure the employee state is updated in Firebase
-            setTimeout(async () => {
-              try {
-                const assignedTicket = await autoAssignNextTicket(currentEmployee.id);
-                
-                if (assignedTicket) {
-                  console.log('✅ Auto-assigned ticket:', assignedTicket.number);
-                  
-                  // Set up timer for the new ticket
-                  setServiceStartTime(new Date());
-                  setElapsedTime(0);
-                  setIsTimerRunning(true);
-                  
-                  // Show success message
-                  alert(`Ticket #${assignedTicket.number.toString().padStart(3, '0')} asignado automáticamente`);
-                } else {
-                  console.log('ℹ️ No tickets were auto-assigned (might have been taken by another employee)');
-                }
-              } catch (autoAssignError) {
-                console.error('❌ Error in delayed auto-assignment:', autoAssignError);
-              }
-            }, 1000); // 1 second delay
-            
-          } catch (autoAssignError) {
-            console.error('❌ Error in auto-assignment:', autoAssignError);
-            // Don't show error to user, just log it
-          }
-        } else {
-          console.log('ℹ️ No tickets available for auto-assignment');
-        }
-      }
-      
     } catch (error) {
-      console.error('❌ Error toggling pause:', error);
-      alert('Error al cambiar estado de pausa: ' + (error instanceof Error ? error.message : 'Error desconocido'));
-    } finally {
-      setIsLoading(false);
+      console.error('Error toggling pause:', error);
+      alert('Error al cambiar estado de pausa');
     }
   };
 
@@ -271,12 +208,7 @@ export default function EmpleadoUser() {
       if (callNext) {
         // Use the auto-assign function from context
         try {
-          const assignedTicket = await autoAssignNextTicket(currentEmployee.id);
-          if (assignedTicket) {
-            setServiceStartTime(new Date());
-            setElapsedTime(0);
-            setIsTimerRunning(true);
-          }
+          await autoAssignNextTicket(currentEmployee.id);
         } catch (error) {
           console.error('Error auto-assigning next ticket:', error);
         }
@@ -460,63 +392,32 @@ export default function EmpleadoUser() {
               <Coffee size={64} className="mx-auto text-orange-400 mb-4" />
               <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
               <p className="text-lg text-gray-600 mb-6">
-                {queueStats.totalWaitingCount > 0 
+                {waitingTickets.length > 0 
                   ? 'Presiona "Reanudar" para comenzar a atender tickets'
                   : 'No hay tickets pendientes. Esperando nuevos tickets...'
                 }
               </p>
-              
-              {/* IMPROVED: Better next ticket info */}
-              {queueStats.totalWaitingCount > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                  <div className="flex items-center justify-center space-x-2 mb-2">
-                    {queueStats.nextTicketType === 'personal' ? (
-                      <div className="flex items-center space-x-2 text-purple-700">
-                        <ArrowRight size={16} />
-                        <span className="font-semibold">Próximo: Tu cola personal</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2 text-blue-700">
-                        <ArrowRight size={16} />
-                        <span className="font-semibold">Próximo: Cola general</span>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-yellow-700 text-sm">
-                    {queueStats.personalQueueCount > 0 && (
-                      <span className="font-medium">{queueStats.personalQueueCount} tickets en tu cola personal</span>
-                    )}
-                    {queueStats.personalQueueCount > 0 && queueStats.generalQueueCount > 0 && ' • '}
-                    {queueStats.generalQueueCount > 0 && (
-                      <span>{queueStats.generalQueueCount} tickets en cola general</span>
-                    )}
+              {waitingTickets.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <p className="text-yellow-800 text-sm mb-2">
+                    <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
                   </p>
-                  <p className="text-yellow-600 text-xs mt-2">
-                    Al reanudar, automáticamente tomarás el siguiente ticket disponible
+                  <p className="text-yellow-700 text-xs">
+                    Al reanudar, automáticamente tomarás este ticket para atención
                   </p>
                 </div>
               )}
-              
               <button
                 onClick={handleTogglePause}
-                disabled={isLoading || queueStats.totalWaitingCount === 0}
+                disabled={waitingTickets.length === 0}
                 className={`py-3 px-8 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2 mx-auto ${
-                  queueStats.totalWaitingCount > 0 && !isLoading
+                  waitingTickets.length > 0
                     ? 'bg-green-500 hover:bg-green-600 text-white'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {isLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    <span>Procesando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={20} />
-                    <span>Reanudar</span>
-                  </>
-                )}
+                <Play size={20} />
+                <span>Reanudar</span>
               </button>
             </div>
           ) : currentTicket ? (
@@ -534,7 +435,7 @@ export default function EmpleadoUser() {
               <User size={64} className="mx-auto text-gray-300 mb-4" />
               <p className="text-xl text-gray-500">No hay tickets en atención</p>
               <p className="text-gray-400">
-                {queueStats.totalWaitingCount > 0 
+                {waitingTickets.length > 0 
                   ? 'Presiona "Reanudar" para tomar el siguiente ticket'
                   : 'Esperando nuevos tickets...'
                 }
