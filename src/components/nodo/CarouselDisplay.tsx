@@ -31,11 +31,11 @@ export default function CarouselDisplay({
       return <span>{carouselTitle}</span>;
     }
 
-    // PERFECTED: Calculate animation duration for continuous smooth scrolling
-    const baseSpeed = 8; // Optimized for continuous smooth movement
+    // PERFECTED: Calculate animation duration for continuous smooth scrolling with 200% range
+    const baseSpeed = 10; // Increased for longer distance (200% to -200% = 400% total)
     const speedMultiplier = (11 - scrollingSpeed) / 10; // Convert 1-10 scale to 0.1-1.0
     const textLength = carouselTitle.length;
-    const lengthFactor = Math.max(1, textLength / 15); // Adjusted for continuous scrolling
+    const lengthFactor = Math.max(1, textLength / 20); // Adjusted for longer scrolling distance
     const animationDuration = baseSpeed * speedMultiplier * lengthFactor;
     
     // Generate unique animation name to avoid conflicts
@@ -54,10 +54,10 @@ export default function CarouselDisplay({
         <style jsx>{`
           @keyframes ${animationName} {
             0% {
-              transform: translateX(110%);
+              transform: translateX(200%);
             }
             100% {
-              transform: translateX(-110%);
+              transform: translateX(-200%);
             }
           }
         `}</style>
