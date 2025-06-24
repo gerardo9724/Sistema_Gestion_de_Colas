@@ -614,38 +614,42 @@ export default function EmpleadoUser() {
                 </p>
               </div>
               
+              {/* UPDATED: Action buttons with ICONS ONLY */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <button
                   onClick={() => handleCompleteTicket(currentTicket.id)}
-                  className="bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                  className="bg-green-500 hover:bg-green-600 text-white py-4 px-4 rounded-xl font-semibold transition-colors flex flex-col items-center justify-center space-y-1"
+                  title="Finalizar ticket"
                 >
-                  <CheckCircle size={20} />
-                  <span>Finalizar</span>
+                  <CheckCircle size={24} />
+                  <span className="text-xs">Finalizar</span>
                 </button>
                 
                 <button
                   onClick={() => handleCompleteTicket(currentTicket.id, true)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                  className="bg-blue-500 hover:bg-blue-600 text-white py-4 px-4 rounded-xl font-semibold transition-colors flex flex-col items-center justify-center space-y-1"
+                  title="Finalizar y llamar siguiente"
                 >
-                  <SkipForward size={20} />
-                  <span>Finalizar y Siguiente</span>
+                  <SkipForward size={24} />
+                  <span className="text-xs">Siguiente</span>
                 </button>
                 
-                {/* NEW: Derive Button */}
                 <button
                   onClick={() => setShowDeriveModal(true)}
-                  className="bg-purple-500 hover:bg-purple-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                  className="bg-purple-500 hover:bg-purple-600 text-white py-4 px-4 rounded-xl font-semibold transition-colors flex flex-col items-center justify-center space-y-1"
+                  title="Derivar ticket a otro empleado"
                 >
-                  <ArrowRight size={20} />
-                  <span>Derivar</span>
+                  <ArrowRight size={24} />
+                  <span className="text-xs">Derivar</span>
                 </button>
                 
                 <button
                   onClick={() => setShowCancelModal(true)}
-                  className="bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                  className="bg-red-500 hover:bg-red-600 text-white py-4 px-4 rounded-xl font-semibold transition-colors flex flex-col items-center justify-center space-y-1"
+                  title="Cancelar ticket"
                 >
-                  <X size={20} />
-                  <span>Cancelar</span>
+                  <X size={24} />
+                  <span className="text-xs">Cancelar</span>
                 </button>
               </div>
             </div>
