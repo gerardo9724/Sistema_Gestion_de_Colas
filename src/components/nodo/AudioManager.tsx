@@ -43,17 +43,22 @@ export default function AudioManager({
       const employee = employees.find(emp => emp.id === newlyServedTicket.servedBy);
       
       if (employee) {
-        // Highlight the ticket
+        // Highlight the ticket IMMEDIATELY
         onTicketHighlighted(newlyServedTicket.id);
         onTicketAnnounced(newlyServedTicket.id);
         
         // Play notification sound
         playNotificationSound();
         
-        // Announce the ticket with configured voice
+        // FIRST announcement after 800ms
         setTimeout(() => {
           announceTicket(newlyServedTicket.number, employee.name);
         }, 800);
+        
+        // SECOND announcement after 4 seconds (repeat)
+        setTimeout(() => {
+          announceTicket(newlyServedTicket.number, employee.name);
+        }, 4000);
         
         // Remove highlight after configured duration
         setTimeout(() => {

@@ -12,7 +12,7 @@ interface QueueDisplayProps {
   textColor: string;
   accentColor: string;
   enableAnimations: boolean;
-  isFullWidth?: boolean; // NEW: Indicates if queue should take full width
+  isFullWidth?: boolean;
 }
 
 export default function QueueDisplay({
@@ -25,21 +25,19 @@ export default function QueueDisplay({
   textColor,
   accentColor,
   enableAnimations,
-  isFullWidth = false // NEW: Default to half width
+  isFullWidth = false
 }: QueueDisplayProps) {
   
   const getBeingServedGridCols = () => {
     const count = beingServedTickets.length;
     
-    // NEW: Adjust grid based on full width mode
     if (isFullWidth) {
       if (count === 1) return 'grid-cols-1';
       if (count === 2) return 'grid-cols-2';
       if (count <= 4) return 'grid-cols-2';
       if (count <= 6) return 'grid-cols-3';
-      return 'grid-cols-4'; // More columns for full width
+      return 'grid-cols-4';
     } else {
-      // Original logic for half width
       if (count === 1) return 'grid-cols-1';
       if (count === 2) return 'grid-cols-2';
       if (count <= 4) return 'grid-cols-2';
@@ -47,7 +45,6 @@ export default function QueueDisplay({
     }
   };
 
-  // NEW: Adjust ticket size based on full width mode
   const ticketMinHeight = isFullWidth ? '100px' : '90px';
   const ticketMaxHeight = isFullWidth ? '120px' : '110px';
 
@@ -59,7 +56,7 @@ export default function QueueDisplay({
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {/* Currently Being Served - OPTIMIZED HEIGHT */}
+        {/* Currently Being Served - IMPROVED SCROLLING LAYOUT */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
@@ -68,78 +65,98 @@ export default function QueueDisplay({
             </h3>
           </div>
           
-          <div className={`flex-1 flex flex-col justify-start ${isFullWidth ? 'max-h-[400px]' : 'max-h-[320px]'} overflow-hidden`}>
+          {/* CRITICAL: Scrollable container with proper height management */}
+          <div className={`flex-1 overflow-y-auto ${isFullWidth ? 'max-h-[400px]' : 'max-h-[320px]'}`}>
             {beingServedTickets.length > 0 ? (
-              <div className={`grid ${getBeingServedGridCols()} gap-2.5 h-full`}>
-                {beingServedTickets.map((ticket) => {
+              <div className="space-y-3 pr-2"> {/* Vertical layout with spacing */}
+                {beingServedTickets.map((ticket, index) => {
                   const employee = employees.find(emp => emp.id === ticket.servedBy);
                   const isHighlighted = highlightedTicket === ticket.id;
                   
                   return (
                     <div 
                       key={ticket.id} 
-                      className={`rounded-xl p-2.5 text-center shadow-lg flex flex-col justify-center relative overflow-hidden border-2 ${
+                      className={`rounded-xl p-3 text-center shadow-lg flex items-center justify-between relative overflow-hidden border-2 ${
                         enableAnimations ? 'transition-all duration-1000' : ''
                       } ${
                         isHighlighted 
-                          ? 'bg-gradient-to-br from-red-400 to-red-600 text-white border-red-300 shadow-2xl transform scale-105 z-10' 
-                          : 'bg-gradient-to-br text-white hover:scale-102'
+                          ? 'bg-gradient-to-r from-red-400 to-red-600 text-white border-red-300 shadow-2xl transform scale-105 z-10' 
+                          : 'bg-gradient-to-r text-white hover:scale-102'
                       }`}
                       style={{
-                        minHeight: ticketMinHeight,
-                        maxHeight: ticketMaxHeight,
+                        minHeight: '80px',
                         backgroundColor: isHighlighted ? undefined : accentColor,
                         borderColor: isHighlighted ? undefined : accentColor,
-                        ...(enableAnimations && isHighlighted ? { animationName: 'pulse' } : {})
+                        ...(enableAnimations && isHighlighted ? { 
+                          animation: 'pulse 2s infinite, glow 2s infinite' 
+                        } : {})
                       }}
                     >
+                      {/* ENHANCED: Multiple highlight effects for called tickets */}
                       {isHighlighted && (
                         <>
                           <div className="absolute inset-0 bg-white bg-opacity-20 animate-ping rounded-xl"></div>
-                          <div className="absolute top-1.5 left-1.5 bg-yellow-400 text-red-800 px-1.5 py-0.5 rounded-full text-xs font-bold animate-bounce">
+                          <div className="absolute top-2 left-2 bg-yellow-400 text-red-800 px-2 py-1 rounded-full text-xs font-bold animate-bounce z-20">
                             ¡LLAMANDO!
                           </div>
+                          <div className="absolute inset-0 border-4 border-yellow-400 rounded-xl animate-pulse"></div>
                         </>
                       )}
                       
-                      <div className={`${isFullWidth ? 'text-2xl' : 'text-xl'} font-bold mb-1.5 relative z-10 drop-shadow-lg ${
-                        isHighlighted && enableAnimations ? 'animate-bounce' : ''
-                      }`}>
-                        #{ticket.number.toString().padStart(3, '0')}
+                      {/* Left side - Ticket number */}
+                      <div className="flex-shrink-0">
+                        <div className={`${isFullWidth ? 'text-3xl' : 'text-2xl'} font-bold relative z-10 drop-shadow-lg ${
+                          isHighlighted && enableAnimations ? 'animate-bounce' : ''
+                        }`}>
+                          #{ticket.number.toString().padStart(3, '0')}
+                        </div>
                       </div>
                       
-                      <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} font-bold mb-1 relative z-10 drop-shadow`}>
-                        {employee?.name || 'N/A'}
+                      {/* Center - Employee info */}
+                      <div className="flex-1 px-4">
+                        <div className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold mb-1 relative z-10 drop-shadow`}>
+                          {employee?.name || 'N/A'}
+                        </div>
+                        <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} opacity-90 text-white relative z-10`}>
+                          {employee?.position}
+                        </div>
                       </div>
                       
-                      <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} opacity-90 text-white relative z-10`}>
-                        {employee?.position}
+                      {/* Right side - Service type */}
+                      <div className="flex-shrink-0 text-right">
+                        <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} font-semibold opacity-90 relative z-10`}>
+                          {ticket.serviceType.toUpperCase()}
+                        </div>
+                        {ticket.servedAt && (
+                          <div className={`${isFullWidth ? 'text-xs' : 'text-xs'} opacity-75 relative z-10`}>
+                            {new Date(ticket.servedAt).toLocaleTimeString()}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
                 
-                {/* Fill empty slots if less than max */}
+                {/* Fill empty slots if less than max - VERTICAL LAYOUT */}
                 {Array.from({ 
-                  length: Math.max(0, maxTicketsDisplayed - beingServedTickets.length) 
+                  length: Math.max(0, Math.min(3, maxTicketsDisplayed - beingServedTickets.length))
                 }).map((_, index) => (
                   <div 
                     key={`empty-served-${index}`} 
-                    className={`bg-gray-100 bg-opacity-70 rounded-xl p-2.5 text-center flex flex-col justify-center border-2 border-dashed border-gray-300 ${
+                    className={`bg-gray-100 bg-opacity-70 rounded-xl p-3 text-center flex items-center justify-center border-2 border-dashed border-gray-300 ${
                       enableAnimations ? 'hover:bg-gray-200 transition-colors' : ''
                     }`}
-                    style={{
-                      minHeight: ticketMinHeight,
-                      maxHeight: ticketMaxHeight
-                    }}
+                    style={{ minHeight: '80px' }}
                   >
-                    <div className={`${isFullWidth ? 'text-2xl' : 'text-xl'} font-bold mb-1.5 text-gray-400`}>---</div>
-                    <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} text-gray-500 font-medium`}>Disponible</div>
+                    <div className="text-center">
+                      <div className={`${isFullWidth ? 'text-xl' : 'text-lg'} font-bold mb-1 text-gray-400`}>---</div>
+                      <div className={`${isFullWidth ? 'text-sm' : 'text-xs'} text-gray-500 font-medium`}>Disponible</div>
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center text-gray-400 py-8">
+              <div className="text-center text-gray-400 py-8 flex flex-col items-center justify-center h-full">
                 <div className={`${isFullWidth ? 'text-6xl' : 'text-4xl'} font-bold mb-3 opacity-30`}>---</div>
                 <p className={`${isFullWidth ? 'text-xl' : 'text-lg'} font-semibold mb-2`}>No hay tickets siendo atendidos</p>
                 <p className={`${isFullWidth ? 'text-base' : 'text-sm'} opacity-75`}>Esperando actividad...</p>
@@ -148,7 +165,7 @@ export default function QueueDisplay({
           </div>
         </div>
 
-        {/* Next in Queue - REMOVED "SIGUIENTE" TEXT */}
+        {/* Next in Queue - COMPACT */}
         {showQueueInfo && (
           <div className="flex-shrink-0">
             <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-2 border border-gray-200 shadow-sm">
@@ -177,7 +194,6 @@ export default function QueueDisplay({
                       }`}>
                         #{ticket.number.toString().padStart(3, '0')}
                       </div>
-                      {/* REMOVED: "SIGUIENTE" text - now only shows ticket number */}
                     </div>
                   );
                 })}
@@ -194,6 +210,18 @@ export default function QueueDisplay({
           </div>
         )}
       </div>
+      
+      {/* ENHANCED: Add custom CSS for glow effect */}
+      <style jsx>{`
+        @keyframes glow {
+          0%, 100% {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+          }
+          50% {
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.8), 0 0 60px rgba(239, 68, 68, 0.6);
+          }
+        }
+      `}</style>
     </div>
   );
 }
