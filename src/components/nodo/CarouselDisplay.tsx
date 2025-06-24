@@ -25,29 +25,51 @@ export default function CarouselDisplay({
   scrollingSpeed
 }: CarouselDisplayProps) {
   
-  // Calculate animation duration based on speed setting
-  const baseSpeed = 20; // Base speed in seconds
+  // FIXED: Calculate animation duration for complete text display
+  const baseSpeed = 15; // Base speed in seconds
   const speedMultiplier = (11 - scrollingSpeed) / 10; // Convert 1-10 scale to 0.1-1.0
   const textLength = carouselTitle.length;
-  const lengthFactor = Math.max(1, textLength / 20); // Adjust for text length
+  const lengthFactor = Math.max(1, textLength / 15); // Adjust for text length
   const animationDuration = baseSpeed * speedMultiplier * lengthFactor;
   
-  // Scrolling text component with stable animation
+  // SOLUTION: Scrolling text component with proper complete hiding
   const ScrollingTitle = ({ text }: { text: string }) => {
     if (!enableScrollingText) {
       return <span>{text}</span>;
     }
 
     return (
-      <div className="overflow-hidden whitespace-nowrap relative w-full">
+      <div 
+        className="relative w-full overflow-hidden"
+        style={{ height: '1.5rem' }} // Fixed height to prevent layout shifts
+      >
+        {/* CRITICAL: Container that ensures text starts and ends completely hidden */}
         <div 
-          className="inline-block animate-scroll-text"
+          className="absolute top-0 whitespace-nowrap"
           style={{
-            '--animation-duration': `${animationDuration}s`,
-          } as React.CSSProperties}
+            left: '100%', // Start completely outside (right)
+            animation: `scrollText ${animationDuration}s linear infinite`,
+          }}
         >
           {text}
         </div>
+        
+        {/* GLOBAL CSS for scrolling animation - injected once */}
+        <style dangerouslySetInnerHTML={{
+          __html: `
+            @keyframes scrollText {
+              0% {
+                left: 100%;
+              }
+              70% {
+                left: -100%;
+              }
+              100% {
+                left: -100%;
+              }
+            }
+          `
+        }} />
       </div>
     );
   };
@@ -142,25 +164,6 @@ export default function CarouselDisplay({
           </div>
         </div>
       </div>
-      
-      {/* CSS for scrolling animation - Added to global styles */}
-      <style jsx global>{`
-        @keyframes scroll-text {
-          0% {
-            transform: translateX(100%);
-          }
-          75% {
-            transform: translateX(-100%);
-          }
-          100% {
-            transform: translateX(-100%);
-          }
-        }
-        
-        .animate-scroll-text {
-          animation: scroll-text var(--animation-duration, 20s) linear infinite;
-        }
-      `}</style>
     </div>
   );
 }
