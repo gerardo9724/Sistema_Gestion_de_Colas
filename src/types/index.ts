@@ -17,6 +17,14 @@ export interface Ticket {
   totalTime?: number;
   cancellationReason?: string;
   cancellationComment?: string;
+  // NEW: Derivation workflow fields
+  derivedFrom?: string; // ID of employee who derived this ticket
+  derivedTo?: string; // ID of employee this ticket was derived to
+  derivedAt?: Date; // When the ticket was derived
+  derivationReason?: string; // Reason for derivation
+  queueType?: 'general' | 'personal'; // Type of queue (general or personal to employee)
+  assignedToEmployee?: string; // For personal queues - which employee this is assigned to
+  priority?: 'normal' | 'high' | 'urgent'; // Priority level
 }
 
 export interface ServiceCategory {
@@ -55,6 +63,10 @@ export interface Employee {
   isPaused: boolean;
   userId?: string;
   createdAt: Date;
+  // NEW: Personal queue management
+  personalQueueCount?: number; // Number of tickets in personal queue
+  maxPersonalQueueSize?: number; // Maximum tickets allowed in personal queue
+  autoAcceptDerivations?: boolean; // Auto-accept derived tickets
 }
 
 export interface User {
@@ -201,6 +213,22 @@ export interface PrintSettings {
   testMode: boolean;
 }
 
+// NEW: Ticket Derivation Interface
+export interface TicketDerivation {
+  id: string;
+  ticketId: string;
+  fromEmployeeId: string;
+  toEmployeeId?: string; // undefined if derived to general queue
+  derivationType: 'to_employee' | 'to_general_queue';
+  reason?: string;
+  comment?: string;
+  newServiceType?: string;
+  derivedAt: Date;
+  acceptedAt?: Date;
+  rejectedAt?: Date;
+  status: 'pending' | 'accepted' | 'rejected' | 'auto_assigned';
+}
+
 export interface AppState {
   tickets: Ticket[];
   serviceCategories: ServiceCategory[];
@@ -212,6 +240,7 @@ export interface AppState {
   carouselImages: CarouselImage[];
   ticketTemplates: TicketTemplate[];
   cancellationReasons: CancellationReason[];
+  ticketDerivations: TicketDerivation[]; // NEW: Track derivations
   currentUser: User | null;
   currentEmployee: Employee | null;
   currentComputerProfile: ComputerProfile | null;

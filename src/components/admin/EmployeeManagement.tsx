@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Users, Settings, BarChart3, Clock, User, CheckCircle, XCircle, Pause, Play, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Users, Settings, BarChart3, Clock, User, CheckCircle, XCircle, Pause, Play, ArrowRight, Star, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { employeeService } from '../../services/employeeService';
 import { ticketService } from '../../services/ticketService';
+import { ticketQueueService } from '../../services/ticketQueueService';
 import type { Employee, Ticket } from '../../types';
 
 export default function EmployeeManagement() {
@@ -11,6 +12,37 @@ export default function EmployeeManagement() {
   const [showDeriveModal, setShowDeriveModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [employeeStats, setEmployeeStats] = useState<Record<string, {
+    personalQueueCount: number;
+    generalQueueCount: number;
+    totalWaitingCount: number;
+    nextTicketType: 'personal' | 'general' | 'none';
+  }>>({});
+
+  // Load queue stats for all employees
+  useEffect(() => {
+    const loadAllEmployeeStats = async () => {
+      const stats: Record<string, any> = {};
+      
+      for (const employee of state.employees) {
+        if (employee.isActive) {
+          try {
+            const employeeStats = await ticketQueueService.getEmployeeQueueStats(employee.id);
+            stats[employee.id] = employeeStats;
+          } catch (error) {
+            console.error(`Error loading stats for employee ${employee.id}:`, error);
+          }
+        }
+      }
+      
+      setEmployeeStats(stats);
+    };
+    
+    loadAllEmployeeStats();
+    // Refresh stats every 15 seconds
+    const interval = setInterval(loadAllEmployeeStats, 15000);
+    return () => clearInterval(interval);
+  }, [state.employees]);
 
   const handleToggleEmployeePause = async (employee: Employee) => {
     if (employee.currentTicketId) {
@@ -77,41 +109,22 @@ export default function EmployeeManagement() {
   const handleDeriveTicket = async (ticket: Ticket, targetEmployeeId: string) => {
     setIsLoading(true);
     try {
-      const targetEmployee = state.employees.find(e => e.id === targetEmployeeId);
-      if (!targetEmployee) {
-        alert('Empleado destino no encontrado');
+      const sourceEmployeeId = ticket.servedBy;
+      if (!sourceEmployeeId) {
+        alert('No se puede determinar el empleado origen');
         return;
       }
 
-      if (targetEmployee.currentTicketId) {
-        alert('El empleado destino ya tiene un ticket asignado');
-        return;
-      }
-
-      // Update ticket
-      await ticketService.updateTicket(ticket.id, {
-        servedBy: targetEmployeeId,
-        servedAt: new Date()
-      });
-
-      // Update source employee
-      if (ticket.servedBy) {
-        const sourceEmployee = state.employees.find(e => e.id === ticket.servedBy);
-        if (sourceEmployee) {
-          await employeeService.updateEmployee(sourceEmployee.id, {
-            ...sourceEmployee,
-            currentTicketId: undefined,
-            isPaused: true
-          });
+      // Use the ticket queue service for derivation
+      await ticketQueueService.deriveTicketToEmployee(
+        ticket.id,
+        sourceEmployeeId,
+        targetEmployeeId,
+        {
+          reason: 'Derivación administrativa',
+          priority: 'high'
         }
-      }
-
-      // Update target employee
-      await employeeService.updateEmployee(targetEmployeeId, {
-        ...targetEmployee,
-        currentTicketId: ticket.id,
-        isPaused: false
-      });
+      );
 
       setShowDeriveModal(false);
       setSelectedTicket(null);
@@ -127,6 +140,14 @@ export default function EmployeeManagement() {
   const getEmployeeCurrentTicket = (employee: Employee): Ticket | undefined => {
     return state.tickets.find(t => 
       t.status === 'being_served' && t.servedBy === employee.id
+    );
+  };
+
+  const getEmployeePersonalQueue = (employeeId: string): Ticket[] => {
+    return state.tickets.filter(t => 
+      t.status === 'waiting' && 
+      t.queueType === 'personal' && 
+      t.assignedToEmployee === employeeId
     );
   };
 
@@ -169,6 +190,13 @@ export default function EmployeeManagement() {
           {state.employees.map((employee) => {
             const currentTicket = getEmployeeCurrentTicket(employee);
             const serviceTime = currentTicket ? getServiceTime(currentTicket) : 0;
+            const personalQueue = getEmployeePersonalQueue(employee.id);
+            const stats = employeeStats[employee.id] || {
+              personalQueueCount: personalQueue.length,
+              generalQueueCount: 0,
+              totalWaitingCount: personalQueue.length,
+              nextTicketType: personalQueue.length > 0 ? 'personal' : 'none'
+            };
 
             return (
               <div key={employee.id} className="border border-gray-200 rounded-xl p-6 bg-gray-50">
@@ -229,6 +257,11 @@ export default function EmployeeManagement() {
                       <div>Servicio: {currentTicket.serviceType.toUpperCase()}</div>
                       <div>Tiempo: {formatTime(serviceTime)}</div>
                       <div>Iniciado: {currentTicket.servedAt ? new Date(currentTicket.servedAt).toLocaleTimeString() : 'N/A'}</div>
+                      {currentTicket.derivedFrom && (
+                        <div className="text-purple-600 font-medium">
+                          Derivado desde: {state.employees.find(e => e.id === currentTicket.derivedFrom)?.name || 'Empleado'}
+                        </div>
+                      )}
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -251,15 +284,30 @@ export default function EmployeeManagement() {
                   </div>
                 ) : (
                   <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200">
-                    <div className="text-center text-gray-500">
-                      <Clock size={32} className="mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">Sin ticket asignado</p>
-                    </div>
+                    {stats.personalQueueCount > 0 ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Star size={18} className="text-purple-500" />
+                          <div>
+                            <div className="font-semibold text-purple-800">Cola Personal</div>
+                            <div className="text-sm text-purple-600">{stats.personalQueueCount} tickets asignados</div>
+                          </div>
+                        </div>
+                        <div className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-semibold">
+                          Prioridad
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center text-gray-500">
+                        <Clock size={32} className="mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">Sin ticket asignado</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Employee Stats */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-lg font-bold text-green-600">{employee.totalTicketsServed}</div>
                     <div className="text-xs text-gray-500">Atendidos</div>
@@ -267,6 +315,10 @@ export default function EmployeeManagement() {
                   <div className="text-center">
                     <div className="text-lg font-bold text-red-600">{employee.totalTicketsCancelled}</div>
                     <div className="text-xs text-gray-500">Cancelados</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-purple-600">{stats.personalQueueCount}</div>
+                    <div className="text-xs text-gray-500">En Cola</div>
                   </div>
                 </div>
               </div>
@@ -296,6 +348,9 @@ export default function EmployeeManagement() {
                 <h4 className="font-semibold text-gray-800 mb-2">Ticket:</h4>
                 <div className="text-lg font-bold text-purple-600">
                   #{selectedTicket.number.toString().padStart(3, '0')} - {selectedTicket.serviceType.toUpperCase()}
+                </div>
+                <div className="text-sm text-gray-600">
+                  Atendido por: {state.employees.find(e => e.id === selectedTicket.servedBy)?.name || 'Desconocido'}
                 </div>
               </div>
               
@@ -340,6 +395,30 @@ export default function EmployeeManagement() {
           </div>
         </div>
       )}
+
+      {/* System Status */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center space-x-2">
+          <Settings size={20} className="text-blue-600" />
+          <span>Estado del Sistema de Derivación</span>
+        </h2>
+        
+        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle size={20} className="text-blue-600 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-blue-800 mb-2">Flujo de Trabajo de Derivaciones</h3>
+              <ul className="text-sm text-blue-700 space-y-1">
+                <li>• <strong>Empleado A deriva un ticket a Empleado B</strong></li>
+                <li>• <strong>Si Empleado B está disponible:</strong> Asignación inmediata</li>
+                <li>• <strong>Si Empleado B está ocupado:</strong> Ticket va a su cola personal</li>
+                <li>• <strong>Cuando Empleado B termina:</strong> Automáticamente toma el siguiente ticket de su cola</li>
+                <li>• <strong>Prioridad:</strong> Cola personal → Cola general</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

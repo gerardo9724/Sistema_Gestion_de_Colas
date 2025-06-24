@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import type { AppState, Ticket, ServiceCategory, PrintSettings, User, Employee, CarouselImage, ComputerProfile, SystemSettings, NodeConfiguration } from '../types';
+import type { AppState, Ticket, ServiceCategory, PrintSettings, User, Employee, CarouselImage, ComputerProfile, SystemSettings, NodeConfiguration, TicketDerivation } from '../types';
 import { ticketService } from '../services/ticketService';
 import { serviceService } from '../services/serviceService';
 import { employeeService } from '../services/employeeService';
@@ -8,6 +8,8 @@ import { carouselService } from '../services/carouselService';
 import { computerProfileService, getComputerIdentifier } from '../services/computerProfileService';
 import { systemSettingsService } from '../services/systemSettingsService';
 import { nodeConfigurationService } from '../services/nodeConfigurationService';
+import { ticketDerivationService } from '../services/ticketDerivationService';
+import { ticketQueueService } from '../services/ticketQueueService';
 import { printService } from '../services/printService';
 import { testFirebaseConnection } from '../services/firebase';
 
@@ -19,10 +21,11 @@ const initialState: AppState = {
   users: [],
   computerProfiles: [],
   systemSettings: null,
-  nodeConfiguration: null, // NEW: Independent node configuration
+  nodeConfiguration: null,
   carouselImages: [],
   ticketTemplates: [],
   cancellationReasons: [],
+  ticketDerivations: [], // NEW: Track derivations
   currentUser: null,
   currentEmployee: null,
   currentComputerProfile: null,
@@ -51,8 +54,9 @@ type AppAction =
   | { type: 'SET_USERS'; payload: User[] }
   | { type: 'SET_COMPUTER_PROFILES'; payload: ComputerProfile[] }
   | { type: 'SET_SYSTEM_SETTINGS'; payload: SystemSettings | null }
-  | { type: 'SET_NODE_CONFIGURATION'; payload: NodeConfiguration | null } // NEW
+  | { type: 'SET_NODE_CONFIGURATION'; payload: NodeConfiguration | null }
   | { type: 'SET_CAROUSEL_IMAGES'; payload: CarouselImage[] }
+  | { type: 'SET_TICKET_DERIVATIONS'; payload: TicketDerivation[] } // NEW
   | { type: 'ADD_TICKET'; payload: Ticket }
   | { type: 'SET_CURRENT_USER'; payload: User | null }
   | { type: 'SET_CURRENT_EMPLOYEE'; payload: Employee | null }
@@ -93,11 +97,14 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_SYSTEM_SETTINGS':
       return { ...state, systemSettings: action.payload };
     
-    case 'SET_NODE_CONFIGURATION': // NEW
+    case 'SET_NODE_CONFIGURATION':
       return { ...state, nodeConfiguration: action.payload };
     
     case 'SET_CAROUSEL_IMAGES':
       return { ...state, carouselImages: action.payload };
+    
+    case 'SET_TICKET_DERIVATIONS': // NEW
+      return { ...state, ticketDerivations: action.payload };
     
     case 'ADD_TICKET':
       return { ...state, tickets: [action.payload, ...state.tickets] };
@@ -135,7 +142,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
         printSettings: state.printSettings,
         currentComputerProfile: state.currentComputerProfile,
         systemSettings: state.systemSettings,
-        nodeConfiguration: state.nodeConfiguration, // NEW
+        nodeConfiguration: state.nodeConfiguration,
       };
     
     default:
@@ -151,11 +158,16 @@ const AppContext = createContext<{
   loadInitialData: () => Promise<void>;
   checkComputerProfile: () => Promise<void>;
   updateSystemSettings: (updates: Partial<SystemSettings>) => Promise<void>;
-  updateNodeConfiguration: (updates: Partial<NodeConfiguration>) => Promise<void>; // NEW
-  saveCompleteNodeConfiguration: (config: Partial<NodeConfiguration>) => Promise<void>; // NEW
+  updateNodeConfiguration: (updates: Partial<NodeConfiguration>) => Promise<void>;
+  saveCompleteNodeConfiguration: (config: Partial<NodeConfiguration>) => Promise<void>;
   updatePrintSettings: (settings: Partial<PrintSettings>) => void;
   testPrint: () => Promise<boolean>;
   previewTicket: (ticket: Ticket) => void;
+  // NEW: Derivation workflow functions
+  deriveTicketToEmployee: (ticketId: string, fromEmployeeId: string, toEmployeeId: string, options?: any) => Promise<void>;
+  deriveTicketToQueue: (ticketId: string, fromEmployeeId: string, options?: any) => Promise<void>;
+  getEmployeeQueueStats: (employeeId: string) => Promise<any>;
+  autoAssignNextTicket: (employeeId: string) => Promise<Ticket | null>;
 } | null>(null);
 
 // Provider
@@ -215,7 +227,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_SYSTEM_SETTINGS', payload: settings });
     });
 
-    // NEW: Subscribe to node configuration
+    // Subscribe to node configuration
     const unsubscribeNodeConfiguration = nodeConfigurationService.subscribeToNodeConfiguration((config) => {
       dispatch({ type: 'SET_NODE_CONFIGURATION', payload: config });
     });
@@ -223,6 +235,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Subscribe to carousel images
     const unsubscribeCarousel = carouselService.subscribeToCarouselImages((images) => {
       dispatch({ type: 'SET_CAROUSEL_IMAGES', payload: images });
+    });
+
+    // NEW: Subscribe to ticket derivations
+    const unsubscribeDerivations = ticketDerivationService.subscribeToDerivations((derivations) => {
+      dispatch({ type: 'SET_TICKET_DERIVATIONS', payload: derivations });
     });
 
     return () => {
@@ -233,8 +250,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubscribeUsers();
       unsubscribeComputerProfiles();
       unsubscribeSystemSettings();
-      unsubscribeNodeConfiguration(); // NEW
+      unsubscribeNodeConfiguration();
       unsubscribeCarousel();
+      unsubscribeDerivations(); // NEW
     };
   }, [state.isFirebaseConnected]);
 
@@ -299,15 +317,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Loading initial data...');
       
-      const [tickets, serviceCategories, employees, users, computerProfiles, systemSettings, nodeConfiguration, carouselImages] = await Promise.all([
+      const [tickets, serviceCategories, employees, users, computerProfiles, systemSettings, nodeConfiguration, carouselImages, derivations] = await Promise.all([
         ticketService.getAllTickets(),
         serviceService.getAllServiceCategories(),
         employeeService.getAllEmployees(),
         userService.getAllUsers(),
         computerProfileService.getAllComputerProfiles(),
         systemSettingsService.getSystemSettings(),
-        nodeConfigurationService.getNodeConfiguration(), // NEW
+        nodeConfigurationService.getNodeConfiguration(),
         carouselService.getAllCarouselImages(),
+        ticketDerivationService.getAllDerivations(), // NEW
       ]);
 
       dispatch({ type: 'SET_TICKETS', payload: tickets });
@@ -316,8 +335,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_USERS', payload: users });
       dispatch({ type: 'SET_COMPUTER_PROFILES', payload: computerProfiles });
       dispatch({ type: 'SET_SYSTEM_SETTINGS', payload: systemSettings });
-      dispatch({ type: 'SET_NODE_CONFIGURATION', payload: nodeConfiguration }); // NEW
+      dispatch({ type: 'SET_NODE_CONFIGURATION', payload: nodeConfiguration });
       dispatch({ type: 'SET_CAROUSEL_IMAGES', payload: carouselImages });
+      dispatch({ type: 'SET_TICKET_DERIVATIONS', payload: derivations }); // NEW
 
       console.log('Initial data loaded successfully');
     } catch (error) {
@@ -342,7 +362,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // NEW: Update node configuration
+  // Update node configuration
   const updateNodeConfiguration = async (updates: Partial<NodeConfiguration>) => {
     try {
       const existingConfig = state.nodeConfiguration;
@@ -358,7 +378,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // NEW: Save complete node configuration
+  // Save complete node configuration
   const saveCompleteNodeConfiguration = async (config: Partial<NodeConfiguration>) => {
     try {
       await nodeConfigurationService.saveCompleteConfiguration(config);
@@ -441,6 +461,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  // NEW: Derive ticket to employee
+  const deriveTicketToEmployee = async (
+    ticketId: string, 
+    fromEmployeeId: string, 
+    toEmployeeId: string, 
+    options?: any
+  ) => {
+    try {
+      await ticketQueueService.deriveTicketToEmployee(ticketId, fromEmployeeId, toEmployeeId, options);
+    } catch (error) {
+      console.error('Error deriving ticket to employee:', error);
+      throw error;
+    }
+  };
+
+  // NEW: Derive ticket to general queue
+  const deriveTicketToQueue = async (
+    ticketId: string, 
+    fromEmployeeId: string, 
+    options?: any
+  ) => {
+    try {
+      await ticketQueueService.deriveTicketToGeneralQueue(ticketId, fromEmployeeId, options);
+    } catch (error) {
+      console.error('Error deriving ticket to queue:', error);
+      throw error;
+    }
+  };
+
+  // NEW: Get employee queue statistics
+  const getEmployeeQueueStats = async (employeeId: string) => {
+    try {
+      return await ticketQueueService.getEmployeeQueueStats(employeeId);
+    } catch (error) {
+      console.error('Error getting employee queue stats:', error);
+      return {
+        personalQueueCount: 0,
+        generalQueueCount: 0,
+        totalWaitingCount: 0,
+        nextTicketType: 'none'
+      };
+    }
+  };
+
+  // NEW: Auto-assign next ticket
+  const autoAssignNextTicket = async (employeeId: string) => {
+    try {
+      return await ticketQueueService.autoAssignNextTicket(employeeId);
+    } catch (error) {
+      console.error('Error auto-assigning next ticket:', error);
+      return null;
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       state,
@@ -449,11 +523,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadInitialData,
       checkComputerProfile,
       updateSystemSettings,
-      updateNodeConfiguration, // NEW
-      saveCompleteNodeConfiguration, // NEW
+      updateNodeConfiguration,
+      saveCompleteNodeConfiguration,
       updatePrintSettings,
       testPrint,
       previewTicket,
+      // NEW: Derivation workflow functions
+      deriveTicketToEmployee,
+      deriveTicketToQueue,
+      getEmployeeQueueStats,
+      autoAssignNextTicket,
     }}>
       {children}
     </AppContext.Provider>

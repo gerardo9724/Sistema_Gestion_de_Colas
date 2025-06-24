@@ -14,18 +14,28 @@ import {
   Timer,
   Key,
   Volume2,
-  ArrowRight
+  ArrowRight,
+  Star
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { authService } from '../services/authService';
 import { ticketService } from '../services/ticketService';
 import { employeeService } from '../services/employeeService';
-import DeriveTicketModal from './employee/DeriveTicketModal';
+import EnhancedDeriveTicketModal from './employee/EnhancedDeriveTicketModal';
+import QueueStatusCard from './employee/QueueStatusCard';
 
 type TabType = 'queue' | 'profile';
 
 export default function EmpleadoUser() {
-  const { state, dispatch } = useApp();
+  const { 
+    state, 
+    dispatch, 
+    deriveTicketToEmployee, 
+    deriveTicketToQueue, 
+    getEmployeeQueueStats,
+    autoAssignNextTicket 
+  } = useApp();
+  
   const [activeTab, setActiveTab] = useState<TabType>('queue');
   const [serviceStartTime, setServiceStartTime] = useState<Date | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -39,6 +49,14 @@ export default function EmpleadoUser() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // NEW: Queue statistics
+  const [queueStats, setQueueStats] = useState({
+    personalQueueCount: 0,
+    generalQueueCount: 0,
+    totalWaitingCount: 0,
+    nextTicketType: 'none' as 'personal' | 'general' | 'none'
+  });
   
   // CRITICAL: Track the original service start time to prevent timer resets on recalls
   const [originalServiceStartTime, setOriginalServiceStartTime] = useState<Date | null>(null);
@@ -60,6 +78,25 @@ export default function EmpleadoUser() {
   const currentTicket = state.tickets.find(ticket => 
     ticket.status === 'being_served' && ticket.servedBy === currentEmployee?.id
   );
+
+  // NEW: Load queue statistics
+  useEffect(() => {
+    const loadQueueStats = async () => {
+      if (currentEmployee?.id) {
+        try {
+          const stats = await getEmployeeQueueStats(currentEmployee.id);
+          setQueueStats(stats);
+        } catch (error) {
+          console.error('Error loading queue stats:', error);
+        }
+      }
+    };
+
+    loadQueueStats();
+    // Reload stats every 10 seconds
+    const interval = setInterval(loadQueueStats, 10000);
+    return () => clearInterval(interval);
+  }, [currentEmployee?.id, state.tickets, getEmployeeQueueStats]);
 
   // FIXED: Complete state restoration when employee has active ticket - PREVENT TIMER RESET ON RECALLS
   useEffect(() => {
@@ -204,43 +241,20 @@ export default function EmpleadoUser() {
   const handleStartService = async (ticketId: string) => {
     if (!currentEmployee) return;
 
-    const waitingTickets = state.tickets
-      .filter(t => t.status === 'waiting')
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    
-    if (waitingTickets.length === 0) {
-      alert('No hay tickets en espera');
-      return;
-    }
-
-    const nextTicket = waitingTickets[0];
-    if (nextTicket.id !== ticketId) {
-      alert('Solo puedes atender el siguiente ticket en la secuencia');
-      return;
-    }
-
+    // NEW: Use the enhanced queue system to get the next ticket
     try {
-      const now = new Date();
-      const waitTime = Math.floor((now.getTime() - nextTicket.createdAt.getTime()) / 1000);
+      const nextTicket = await autoAssignNextTicket(currentEmployee.id);
       
-      await ticketService.updateTicket(ticketId, {
-        status: 'being_served',
-        servedBy: currentEmployee.id,
-        servedAt: now,
-        waitTime
-      });
-
-      await employeeService.updateEmployee(currentEmployee.id, {
-        ...currentEmployee,
-        currentTicketId: ticketId,
-        isPaused: false
-      });
+      if (!nextTicket || nextTicket.id !== ticketId) {
+        alert('Solo puedes atender el siguiente ticket en la secuencia de prioridad');
+        return;
+      }
 
       // CRITICAL: Set both original and current service start time for new tickets
-      console.log('🆕 Starting NEW ticket service - Setting original timer:', now);
+      console.log('🆕 Starting NEW ticket service - Setting original timer:', new Date());
       setCurrentTicketId(ticketId);
-      setOriginalServiceStartTime(now);
-      setServiceStartTime(now);
+      setOriginalServiceStartTime(new Date());
+      setServiceStartTime(new Date());
       setElapsedTime(0);
       setIsTimerRunning(true);
     } catch (error) {
@@ -282,13 +296,21 @@ export default function EmpleadoUser() {
       setIsTimerRunning(false);
 
       if (callNext) {
-        const waitingTickets = state.tickets
-          .filter(t => t.status === 'waiting')
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        
-        if (waitingTickets.length > 0) {
-          setTimeout(() => handleStartService(waitingTickets[0].id), 500);
-        }
+        // NEW: Use auto-assign system for next ticket
+        setTimeout(async () => {
+          try {
+            const nextTicket = await autoAssignNextTicket(currentEmployee.id);
+            if (nextTicket) {
+              setCurrentTicketId(nextTicket.id);
+              setOriginalServiceStartTime(new Date());
+              setServiceStartTime(new Date());
+              setElapsedTime(0);
+              setIsTimerRunning(true);
+            }
+          } catch (error) {
+            console.error('Error auto-assigning next ticket:', error);
+          }
+        }, 500);
       }
     } catch (error) {
       console.error('Error completing ticket:', error);
@@ -344,51 +366,27 @@ export default function EmpleadoUser() {
     }
   };
 
-  // UPDATED: Handle ticket derivation - NO POP-UP CONFIRMATION
-  const handleDeriveTicket = async (targetType: 'queue' | 'employee', targetId?: string, newServiceType?: string) => {
+  // NEW: Enhanced ticket derivation with workflow support
+  const handleDeriveTicket = async (
+    targetType: 'queue' | 'employee', 
+    targetId?: string, 
+    options?: {
+      newServiceType?: string;
+      priority?: 'normal' | 'high' | 'urgent';
+      reason?: string;
+      comment?: string;
+    }
+  ) => {
     if (!currentEmployee || !currentTicket) return;
 
     try {
       if (targetType === 'queue') {
-        // Return ticket to general queue
-        await ticketService.updateTicket(currentTicket.id, {
-          status: 'waiting',
-          servedBy: undefined,
-          servedAt: undefined,
-          serviceType: newServiceType || currentTicket.serviceType
-        });
+        // Derive to general queue
+        await deriveTicketToQueue(currentTicket.id, currentEmployee.id, options);
       } else if (targetType === 'employee' && targetId) {
-        // Assign to specific employee
-        const targetEmployee = state.employees.find(e => e.id === targetId);
-        if (!targetEmployee) {
-          alert('Empleado destino no encontrado');
-          return;
-        }
-
-        if (targetEmployee.currentTicketId) {
-          alert('El empleado destino ya tiene un ticket asignado');
-          return;
-        }
-
-        await ticketService.updateTicket(currentTicket.id, {
-          servedBy: targetId,
-          servedAt: new Date(),
-          serviceType: newServiceType || currentTicket.serviceType
-        });
-
-        await employeeService.updateEmployee(targetId, {
-          ...targetEmployee,
-          currentTicketId: currentTicket.id,
-          isPaused: false
-        });
+        // Derive to specific employee
+        await deriveTicketToEmployee(currentTicket.id, currentEmployee.id, targetId, options);
       }
-
-      // Update current employee
-      await employeeService.updateEmployee(currentEmployee.id, {
-        ...currentEmployee,
-        currentTicketId: undefined,
-        isPaused: true
-      });
 
       // CRITICAL: Reset all timer state
       console.log('📤 Ticket derived - Resetting all timer state');
@@ -399,8 +397,15 @@ export default function EmpleadoUser() {
       setIsTimerRunning(false);
       setShowDeriveModal(false);
 
-      // REMOVED: No pop-up confirmation - ticket derivation completes silently
-      console.log('✅ Ticket derivado exitosamente - sin pop-up de confirmación');
+      // Success message based on derivation type
+      const targetEmployee = targetId ? state.employees.find(e => e.id === targetId) : null;
+      const message = targetType === 'queue' 
+        ? 'Ticket derivado a cola general exitosamente'
+        : targetEmployee?.currentTicketId
+          ? `Ticket agregado a la cola personal de ${targetEmployee?.name}`
+          : `Ticket asignado inmediatamente a ${targetEmployee?.name}`;
+      
+      console.log('✅', message);
     } catch (error) {
       console.error('Error deriving ticket:', error);
       alert('Error al derivar ticket');
@@ -496,9 +501,50 @@ export default function EmpleadoUser() {
     return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const waitingTickets = state.tickets
-    .filter(ticket => ticket.status === 'waiting')
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // NEW: Get prioritized waiting tickets (personal queue first, then general queue)
+  const getPrioritizedWaitingTickets = () => {
+    const personalQueue = state.tickets.filter(ticket => 
+      ticket.status === 'waiting' && 
+      ticket.queueType === 'personal' &&
+      ticket.assignedToEmployee === currentEmployee?.id
+    ).sort((a, b) => {
+      // Sort by priority first, then by derivation time
+      const priorityOrder = { 'urgent': 3, 'high': 2, 'normal': 1 };
+      const aPriority = priorityOrder[a.priority || 'normal'];
+      const bPriority = priorityOrder[b.priority || 'normal'];
+      
+      if (aPriority !== bPriority) {
+        return bPriority - aPriority;
+      }
+      
+      const aTime = a.derivedAt ? new Date(a.derivedAt).getTime() : new Date(a.createdAt).getTime();
+      const bTime = b.derivedAt ? new Date(b.derivedAt).getTime() : new Date(b.createdAt).getTime();
+      
+      return aTime - bTime;
+    });
+
+    const generalQueue = state.tickets.filter(ticket => 
+      ticket.status === 'waiting' && 
+      (!ticket.queueType || ticket.queueType === 'general') &&
+      !ticket.assignedToEmployee
+    ).sort((a, b) => {
+      // Sort by priority first, then by creation time
+      const priorityOrder = { 'urgent': 3, 'high': 2, 'normal': 1 };
+      const aPriority = priorityOrder[a.priority || 'normal'];
+      const bPriority = priorityOrder[b.priority || 'normal'];
+      
+      if (aPriority !== bPriority) {
+        return bPriority - aPriority;
+      }
+      
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+
+    // Combine: personal queue first, then general queue
+    return [...personalQueue, ...generalQueue];
+  };
+
+  const waitingTickets = getPrioritizedWaitingTickets();
 
   const tabs = [
     { id: 'queue', name: 'Cola de Tickets', icon: Clock },
@@ -516,26 +562,24 @@ export default function EmpleadoUser() {
             <Coffee size={64} className="mx-auto text-orange-400 mb-4" />
             <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
             <p className="text-lg text-gray-600 mb-6">
-              {waitingTickets.length > 0 
+              {queueStats.totalWaitingCount > 0 
                 ? 'Presiona "Reanudar" para comenzar a atender tickets'
                 : 'No hay tickets pendientes. Esperando nuevos tickets...'
               }
             </p>
-            {waitingTickets.length > 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                <p className="text-yellow-800 text-sm mb-2">
-                  <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
-                </p>
-                <p className="text-yellow-700 text-xs">
-                  Al reanudar, automáticamente tomarás este ticket para atención
-                </p>
-              </div>
-            )}
+            
+            {/* NEW: Queue Status Card */}
+            <QueueStatusCard
+              personalQueueCount={queueStats.personalQueueCount}
+              generalQueueCount={queueStats.generalQueueCount}
+              nextTicketType={queueStats.nextTicketType}
+            />
+            
             <button
               onClick={handleTogglePause}
-              disabled={waitingTickets.length === 0}
-              className={`py-3 px-8 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2 mx-auto ${
-                waitingTickets.length > 0
+              disabled={queueStats.totalWaitingCount === 0}
+              className={`mt-6 py-3 px-8 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2 mx-auto ${
+                queueStats.totalWaitingCount > 0
                   ? 'bg-green-500 hover:bg-green-600 text-white'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
@@ -561,6 +605,19 @@ export default function EmpleadoUser() {
                   {currentTicket.waitTime && (
                     <div className="text-sm text-gray-500">
                       Tiempo de espera: {formatTime(currentTicket.waitTime)}
+                    </div>
+                  )}
+                  {/* NEW: Show derivation info if ticket was derived */}
+                  {currentTicket.derivedFrom && (
+                    <div className="text-sm text-purple-600 font-medium mt-1">
+                      📤 Derivado desde: {state.employees.find(e => e.id === currentTicket.derivedFrom)?.name || 'Empleado'}
+                    </div>
+                  )}
+                  {currentTicket.priority && currentTicket.priority !== 'normal' && (
+                    <div className={`text-sm font-bold mt-1 ${
+                      currentTicket.priority === 'urgent' ? 'text-red-600' : 'text-orange-600'
+                    }`}>
+                      {currentTicket.priority === 'urgent' ? '🚨 URGENTE' : '⚡ ALTA PRIORIDAD'}
                     </div>
                   )}
                 </div>
@@ -658,8 +715,18 @@ export default function EmpleadoUser() {
           <div className="text-center py-12">
             <User size={64} className="mx-auto text-gray-300 mb-4" />
             <p className="text-xl text-gray-500">No hay tickets en atención</p>
-            <p className="text-gray-400">
-              {waitingTickets.length > 0 
+            
+            {/* NEW: Queue Status Card when no current ticket */}
+            <div className="mt-6">
+              <QueueStatusCard
+                personalQueueCount={queueStats.personalQueueCount}
+                generalQueueCount={queueStats.generalQueueCount}
+                nextTicketType={queueStats.nextTicketType}
+              />
+            </div>
+            
+            <p className="text-gray-400 mt-4">
+              {queueStats.totalWaitingCount > 0 
                 ? 'Presiona "Reanudar" para tomar el siguiente ticket'
                 : 'Esperando nuevos tickets...'
               }
@@ -668,23 +735,27 @@ export default function EmpleadoUser() {
         )}
       </div>
 
-      {/* Waiting Queue */}
+      {/* Enhanced Waiting Queue */}
       <div className="bg-white rounded-2xl shadow-xl p-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          Cola de Espera ({waitingTickets.length})
+          Cola Priorizada ({waitingTickets.length})
         </h2>
         
         <div className="space-y-4 max-h-96 overflow-y-auto">
           {waitingTickets.map((ticket, index) => {
             const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
+            const isPersonalQueue = ticket.queueType === 'personal' && ticket.assignedToEmployee === currentEmployee?.id;
+            const isNextTicket = index === 0;
             
             return (
               <div
                 key={ticket.id}
                 className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                  index === 0 
+                  isNextTicket 
                     ? 'border-yellow-400 bg-yellow-50' 
-                    : 'border-gray-200 bg-gray-50'
+                    : isPersonalQueue
+                      ? 'border-purple-300 bg-purple-50'
+                      : 'border-gray-200 bg-gray-50'
                 }`}
               >
                 <div className="flex justify-between items-center">
@@ -693,9 +764,24 @@ export default function EmpleadoUser() {
                       <div className="text-2xl font-bold text-gray-800">
                         #{ticket.number.toString().padStart(3, '0')}
                       </div>
-                      {index === 0 && (
+                      {isNextTicket && (
                         <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full">
                           SIGUIENTE
+                        </span>
+                      )}
+                      {isPersonalQueue && (
+                        <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2 py-1 rounded-full flex items-center space-x-1">
+                          <Star size={12} />
+                          <span>PERSONAL</span>
+                        </span>
+                      )}
+                      {ticket.priority && ticket.priority !== 'normal' && (
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                          ticket.priority === 'urgent' 
+                            ? 'bg-red-100 text-red-800' 
+                            : 'bg-orange-100 text-orange-800'
+                        }`}>
+                          {ticket.priority === 'urgent' ? '🚨 URGENTE' : '⚡ ALTA'}
                         </span>
                       )}
                     </div>
@@ -708,6 +794,11 @@ export default function EmpleadoUser() {
                     <div className="text-sm text-orange-600 font-medium">
                       Esperando: {formatTime(waitTime)}
                     </div>
+                    {ticket.derivedFrom && (
+                      <div className="text-sm text-purple-600 font-medium">
+                        Derivado por: {state.employees.find(e => e.id === ticket.derivedFrom)?.name || 'Empleado'}
+                      </div>
+                    )}
                   </div>
                   
                   <button
@@ -924,6 +1015,18 @@ export default function EmpleadoUser() {
                   </div>
                   <div className="text-green-600 text-xs">
                     {originalServiceStartTime ? formatTime(elapsedTime) : 'Iniciando...'}
+                  </div>
+                </div>
+              )}
+              
+              {/* NEW: Queue Status Indicator */}
+              {!currentTicket && queueStats.personalQueueCount > 0 && (
+                <div className="bg-purple-100 border border-purple-300 rounded-lg px-3 py-2 flex items-center space-x-2">
+                  <Star size={16} className="text-purple-600" />
+                  <div>
+                    <div className="text-purple-800 font-semibold text-sm">
+                      {queueStats.personalQueueCount} tickets en tu cola personal
+                    </div>
                   </div>
                 </div>
               )}
@@ -1160,9 +1263,9 @@ export default function EmpleadoUser() {
         </div>
       )}
 
-      {/* NEW: Derive Ticket Modal */}
+      {/* NEW: Enhanced Derive Ticket Modal */}
       {showDeriveModal && currentTicket && (
-        <DeriveTicketModal
+        <EnhancedDeriveTicketModal
           ticket={currentTicket}
           employees={state.employees}
           serviceCategories={state.serviceCategories}
