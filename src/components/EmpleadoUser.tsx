@@ -249,7 +249,7 @@ export default function EmpleadoUser() {
     }
   };
 
-  // CRITICAL: Handle ticket recall (call client again in the node) - RESETS TIMER
+  // FIXED: Handle ticket recall (call client again in the node) - NO POPUP
   const handleRecallTicket = async () => {
     if (!currentEmployee || !currentTicket) {
       console.warn('No hay ticket en atención para volver a llamar');
@@ -257,25 +257,17 @@ export default function EmpleadoUser() {
     }
 
     try {
-      console.log('🔊 Recalling ticket and resetting timer:', currentTicket.number);
+      console.log('🔊 Recalling ticket:', currentTicket.number);
       
-      const now = new Date();
-      
-      // CRITICAL: Update the ticket's servedAt time to trigger a new announcement
+      // FIXED: Update the ticket's servedAt time to trigger a new announcement
       // This will cause the AudioManager to detect it as a "newly served" ticket
       await ticketService.updateTicket(currentTicket.id, {
-        servedAt: now // This timestamp change triggers the audio system
+        servedAt: new Date() // This timestamp change triggers the audio system
       });
 
-      // CRITICAL: Reset the local timer to restart from the new call time
-      setServiceStartTime(now);
-      setElapsedTime(0);
-      setIsTimerRunning(true);
-
-      console.log('✅ Ticket recall triggered successfully and timer reset');
+      console.log('✅ Ticket recall triggered successfully');
     } catch (error) {
       console.error('❌ Error recalling ticket:', error);
-      alert('Error al volver a llamar el ticket');
     }
   };
 
@@ -505,7 +497,7 @@ export default function EmpleadoUser() {
                 </div>
               </div>
               
-              {/* CRITICAL: Recall Button with Timer Reset */}
+              {/* FIXED: Added Recall Button - NO POPUP */}
               <div className="mb-4">
                 <button
                   onClick={handleRecallTicket}
@@ -515,7 +507,7 @@ export default function EmpleadoUser() {
                   <span>Volver a Llamar Cliente</span>
                 </button>
                 <p className="text-xs text-gray-500 mt-1 text-center">
-                  ⏱️ El anuncio se reproducirá nuevamente y el cronómetro se reiniciará
+                  El anuncio se reproducirá nuevamente en el módulo nodo
                 </p>
               </div>
               
@@ -770,7 +762,6 @@ export default function EmpleadoUser() {
                 <li>• Las estadísticas se actualizan automáticamente</li>
                 <li>• <strong>El estado del empleado se mantiene al cerrar y abrir el sistema</strong></li>
                 <li>• <strong>Si tienes un ticket en atención, se restaurará automáticamente</strong></li>
-                <li>• <strong>El botón "Volver a Llamar" reinicia el cronómetro de atención</strong></li>
               </ul>
             </div>
           </div>
