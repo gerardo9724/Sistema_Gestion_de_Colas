@@ -27,7 +27,7 @@ export default function NodoUser() {
         showConnectionStatus: state.nodeConfiguration.showConnectionStatus,
         showHeader: state.nodeConfiguration.showHeader ?? true,
         showCarousel: state.nodeConfiguration.showCarousel ?? true,
-        showStatusBar: state.nodeConfiguration.showStatusBar ?? true, // ADDED: Status bar visibility
+        showStatusBar: state.nodeConfiguration.showStatusBar ?? true, // Status bar visibility
         compactMode: state.nodeConfiguration.compactMode,
         
         // Audio Settings
@@ -68,7 +68,7 @@ export default function NodoUser() {
         showConnectionStatus: true,
         showHeader: true,
         showCarousel: true,
-        showStatusBar: true, // ADDED: Default status bar to visible
+        showStatusBar: true, // Default status bar to visible
         compactMode: false,
         enableAudio: true,
         audioVolume: 0.8,
@@ -143,16 +143,9 @@ export default function NodoUser() {
     color: nodeConfig.textColor,
   };
 
-  // Calculate dynamic height based on header and status bar visibility
-  const getContentHeight = () => {
-    if (nodeConfig.showHeader && nodeConfig.showStatusBar) {
-      return 'h-[calc(100vh-160px)]'; // Both header and status bar
-    } else if (nodeConfig.showHeader || nodeConfig.showStatusBar) {
-      return 'h-[calc(100vh-120px)]'; // Only one of them
-    } else {
-      return 'h-[calc(100vh-40px)]'; // Neither (minimal padding)
-    }
-  };
+  // FIXED: Calculate content height to maintain original aspect - always reserve space for status bar
+  // This ensures consistent layout regardless of status bar visibility
+  const contentHeight = nodeConfig.showHeader ? 'h-[calc(100vh-120px)]' : 'h-[calc(100vh-40px)]';
 
   // Calculate layout based on carousel visibility
   const queueWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-full';
@@ -173,7 +166,7 @@ export default function NodoUser() {
         />
       )}
 
-      <div className={`flex ${getContentHeight()}`}>
+      <div className={`flex ${contentHeight}`}>
         {/* Queue Information - DYNAMIC WIDTH BASED ON CAROUSEL VISIBILITY */}
         <div className={`${queueWidth} p-3 transition-all duration-500`}>
           <QueueDisplay
@@ -208,18 +201,20 @@ export default function NodoUser() {
         )}
       </div>
 
-      {/* Status Bar Component - CONDITIONAL RENDERING */}
+      {/* Status Bar Component - CONDITIONAL RENDERING with FIXED POSITIONING */}
       {nodeConfig.showStatusBar && (
-        <StatusBar
-          waitingTicketsCount={waitingTickets.length}
-          beingServedTicketsCount={beingServedTickets.length}
-          activeEmployeesCount={state.employees.filter(e => e.isActive && !e.isPaused).length}
-          currentTime={currentTime}
-          audioEnabled={nodeConfig.enableAudio}
-          selectedVoice={nodeConfig.selectedVoice}
-          accentColor={nodeConfig.accentColor}
-          showCarousel={nodeConfig.showCarousel}
-        />
+        <div className="fixed bottom-0 left-0 right-0">
+          <StatusBar
+            waitingTicketsCount={waitingTickets.length}
+            beingServedTicketsCount={beingServedTickets.length}
+            activeEmployeesCount={state.employees.filter(e => e.isActive && !e.isPaused).length}
+            currentTime={currentTime}
+            audioEnabled={nodeConfig.enableAudio}
+            selectedVoice={nodeConfig.selectedVoice}
+            accentColor={nodeConfig.accentColor}
+            showCarousel={nodeConfig.showCarousel}
+          />
+        </div>
       )}
 
       {/* Audio Manager Component */}
