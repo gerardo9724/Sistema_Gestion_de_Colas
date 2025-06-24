@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Timer, Clock } from 'lucide-react';
+import { Users, Timer, Clock, CheckCircle } from 'lucide-react';
 import type { Ticket, Employee } from '../../types';
 
 interface QueueDisplayProps {
@@ -28,25 +28,44 @@ export default function QueueDisplay({
   isFullWidth = false
 }: QueueDisplayProps) {
 
-  // FIXED: Create vertical slots that fit exactly in the available space - NO SCROLL
-  const createVerticalTicketSlots = () => {
-    const slots = [];
-    const totalSlots = maxTicketsDisplayed;
+  // NEW: Get today's completed tickets following the same ordering logic
+  const getTodaysCompletedTickets = () => {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     
-    // CRITICAL: Show ALL tickets being served up to the limit (no filtering)
-    for (let i = 0; i < Math.min(beingServedTickets.length, totalSlots); i++) {
-      slots.push({ type: 'ticket', ticket: beingServedTickets[i], index: i });
-    }
-    
-    // Fill remaining slots with empty placeholders
-    for (let i = beingServedTickets.length; i < totalSlots; i++) {
-      slots.push({ type: 'empty', index: i });
-    }
-    
-    return slots;
+    return beingServedTickets
+      .filter(ticket => 
+        ticket.status === 'completed' && 
+        ticket.completedAt &&
+        new Date(ticket.completedAt) >= startOfDay &&
+        new Date(ticket.completedAt) < endOfDay
+      )
+      .sort((a, b) => {
+        // CRITICAL: Same ordering logic as being served tickets
+        // Most recently completed first (reverse chronological order)
+        const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return bTime - aTime; // Most recent completion first
+      });
   };
 
-  const ticketSlots = createVerticalTicketSlots();
+  // FIXED: Combine being served and completed tickets with proper ordering
+  const allTicketsToShow = () => {
+    const todaysCompleted = getTodaysCompletedTickets();
+    
+    // CRITICAL: Combine tickets following the scenario ordering:
+    // 1. Being served tickets (with highlighted ticket first)
+    // 2. Today's completed tickets (most recent first)
+    const combinedTickets = [
+      ...beingServedTickets, // Already sorted with highlighted first
+      ...todaysCompleted     // Already sorted with most recent first
+    ];
+    
+    return combinedTickets.slice(0, maxTicketsDisplayed);
+  };
+
+  const ticketsToDisplay = allTicketsToShow();
 
   // FIXED: Calculate exact height per ticket to avoid scroll
   const ticketHeight = `calc((100% - 120px) / ${maxTicketsDisplayed})`;
@@ -60,22 +79,24 @@ export default function QueueDisplay({
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {/* Currently Being Served - FIXED: No scroll, exact fit */}
+        {/* UPDATED: Now shows both being served and completed tickets */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
             <h3 className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold text-center`} style={{ color: textColor }}>
-              Tickets en Atención ({beingServedTickets.length}/{maxTicketsDisplayed})
+              Tickets Atendidos Hoy ({beingServedTickets.length} en atención, {getTodaysCompletedTickets().length} completados)
             </h3>
           </div>
           
           {/* FIXED: Vertical distribution with exact sizing - NO SCROLL */}
           <div className="flex-1 flex flex-col space-y-2" style={{ height: 'calc(100% - 40px)' }}>
-            {ticketSlots.map((slot) => {
-              if (slot.type === 'empty') {
+            {Array.from({ length: maxTicketsDisplayed }).map((_, index) => {
+              const ticket = ticketsToDisplay[index];
+              
+              if (!ticket) {
                 return (
                   <div 
-                    key={`empty-${slot.index}`}
+                    key={`empty-${index}`}
                     className={`rounded-xl p-3 text-center shadow-lg flex items-center justify-center border-2 border-dashed border-gray-300 bg-gray-50 ${
                       enableAnimations ? 'transition-all duration-300 hover:bg-gray-100' : ''
                     }`}
@@ -95,9 +116,9 @@ export default function QueueDisplay({
                 );
               }
 
-              const ticket = slot.ticket!;
               const employee = employees.find(emp => emp.id === ticket.servedBy);
               const isHighlighted = highlightedTicket === ticket.id;
+              const isCompleted = ticket.status === 'completed';
               
               return (
                 <div 
@@ -109,13 +130,14 @@ export default function QueueDisplay({
                     height: ticketHeight,
                     minHeight: minTicketHeight,
                     maxHeight: '80px',
-                    backgroundColor: accentColor,
-                    borderColor: accentColor,
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                    backgroundColor: isCompleted ? '#10B981' : accentColor, // Green for completed, accent for being served
+                    borderColor: isCompleted ? '#10B981' : accentColor,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                    opacity: isCompleted ? 0.8 : 1 // Slightly transparent for completed tickets
                   }}
                 >
                   {/* FIXED: Internal highlight effects - NO box resizing, only content animation */}
-                  {isHighlighted && (
+                  {isHighlighted && !isCompleted && (
                     <>
                       {/* Subtle background pulse - CONTAINED */}
                       <div className="absolute inset-1 bg-white bg-opacity-20 rounded-lg animate-pulse"></div>
@@ -126,14 +148,21 @@ export default function QueueDisplay({
                       </div>
                     </>
                   )}
+
+                  {/* NEW: Completed ticket indicator */}
+                  {isCompleted && (
+                    <div className="absolute top-1 right-1 bg-white bg-opacity-20 p-1 rounded-full z-30">
+                      <CheckCircle size={16} className="text-white" />
+                    </div>
+                  )}
                   
                   {/* FIXED: SIMPLIFIED ticket content - ONLY basic info */}
                   <div className={`relative z-20 flex items-center justify-between w-full text-white ${
-                    isHighlighted && enableAnimations ? 'animate-pulse' : ''
+                    isHighlighted && enableAnimations && !isCompleted ? 'animate-pulse' : ''
                   }`}>
                     {/* Left side - ONLY Ticket number */}
                     <div className={`flex items-center ${
-                      isHighlighted && enableAnimations ? 'transform scale-110 transition-transform duration-1000' : ''
+                      isHighlighted && enableAnimations && !isCompleted ? 'transform scale-110 transition-transform duration-1000' : ''
                     }`}>
                       <div className="text-2xl font-bold drop-shadow-lg">
                         #{ticket.number.toString().padStart(3, '0')}
@@ -142,16 +171,22 @@ export default function QueueDisplay({
                     
                     {/* Center - ONLY Employee name */}
                     <div className={`flex flex-col items-center text-center ${
-                      isHighlighted && enableAnimations ? 'transform scale-105 transition-transform duration-1000' : ''
+                      isHighlighted && enableAnimations && !isCompleted ? 'transform scale-105 transition-transform duration-1000' : ''
                     }`}>
                       <div className="text-base font-bold drop-shadow">
                         {employee?.name || 'N/A'}
                       </div>
+                      {/* NEW: Show completion time for completed tickets */}
+                      {isCompleted && ticket.completedAt && (
+                        <div className="text-xs opacity-90 drop-shadow">
+                          {new Date(ticket.completedAt).toLocaleTimeString()}
+                        </div>
+                      )}
                     </div>
                     
                     {/* Right side - ONLY Service area */}
                     <div className={`flex items-center text-right ${
-                      isHighlighted && enableAnimations ? 'transform scale-105 transition-transform duration-1000' : ''
+                      isHighlighted && enableAnimations && !isCompleted ? 'transform scale-105 transition-transform duration-1000' : ''
                     }`}>
                       <div className="text-sm font-bold drop-shadow">
                         {ticket.serviceType.toUpperCase()}

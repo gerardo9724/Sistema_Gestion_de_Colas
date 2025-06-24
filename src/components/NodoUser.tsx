@@ -119,21 +119,48 @@ export default function NodoUser() {
     dispatch({ type: 'SET_CURRENT_USER', payload: null });
   };
 
-  // CRITICAL FIXED: Proper ticket ordering - NEW CALLED TICKET GOES TO TOP
-  const beingServedTickets = state.tickets
-    .filter(ticket => ticket.status === 'being_served')
-    .sort((a, b) => {
-      // CRITICAL: Highlighted ticket (newly called) ALWAYS goes first (top position)
-      if (highlightedTicket === a.id && highlightedTicket !== b.id) return -1;
-      if (highlightedTicket === b.id && highlightedTicket !== a.id) return 1;
-      
-      // FIXED: For non-highlighted tickets, sort by served time - MOST RECENT FIRST
-      // This ensures that when a new ticket is called, the previous one moves down
-      const aTime = a.servedAt ? new Date(a.servedAt).getTime() : 0;
-      const bTime = b.servedAt ? new Date(b.servedAt).getTime() : 0;
-      return bTime - aTime; // Most recent (last called) first, then older ones below
-    });
-    // CRITICAL: NO .slice() here - QueueDisplay handles the limit internally
+  // CRITICAL UPDATED: Get ALL tickets (being served AND completed today) for proper display
+  const getAllTicketsForDisplay = () => {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    
+    // Get being served tickets
+    const beingServedTickets = state.tickets
+      .filter(ticket => ticket.status === 'being_served')
+      .sort((a, b) => {
+        // CRITICAL: Highlighted ticket (newly called) ALWAYS goes first (top position)
+        if (highlightedTicket === a.id && highlightedTicket !== b.id) return -1;
+        if (highlightedTicket === b.id && highlightedTicket !== a.id) return 1;
+        
+        // For non-highlighted tickets, sort by served time - MOST RECENT FIRST
+        const aTime = a.servedAt ? new Date(a.servedAt).getTime() : 0;
+        const bTime = b.servedAt ? new Date(b.servedAt).getTime() : 0;
+        return bTime - aTime; // Most recent (last called) first, then older ones below
+      });
+
+    // Get today's completed tickets
+    const todaysCompletedTickets = state.tickets
+      .filter(ticket => 
+        ticket.status === 'completed' && 
+        ticket.completedAt &&
+        new Date(ticket.completedAt) >= startOfDay &&
+        new Date(ticket.completedAt) < endOfDay
+      )
+      .sort((a, b) => {
+        // Sort completed tickets by completion time - MOST RECENT FIRST
+        const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return bTime - aTime; // Most recently completed first
+      });
+
+    // CRITICAL: Combine following the scenario ordering:
+    // 1. Being served tickets (with highlighted first)
+    // 2. Today's completed tickets (most recent first)
+    return [...beingServedTickets, ...todaysCompletedTickets];
+  };
+
+  const allTicketsForDisplay = getAllTicketsForDisplay();
 
   // Get next tickets in queue - limited to 2 only
   const waitingTickets = state.tickets
@@ -181,7 +208,7 @@ export default function NodoUser() {
         {/* Queue Information - DYNAMIC WIDTH BASED ON CAROUSEL VISIBILITY */}
         <div className={`${queueWidth} p-3 transition-all duration-500`}>
           <QueueDisplay
-            beingServedTickets={beingServedTickets}
+            beingServedTickets={allTicketsForDisplay} // UPDATED: Pass all tickets (being served + completed today)
             waitingTickets={waitingTickets}
             employees={state.employees}
             highlightedTicket={highlightedTicket}
@@ -217,7 +244,7 @@ export default function NodoUser() {
         <div className="fixed bottom-0 left-0 right-0">
           <StatusBar
             waitingTicketsCount={waitingTickets.length}
-            beingServedTicketsCount={beingServedTickets.length}
+            beingServedTicketsCount={state.tickets.filter(t => t.status === 'being_served').length} // Only count being served
             activeEmployeesCount={state.employees.filter(e => e.isActive && !e.isPaused).length}
             currentTime={currentTime}
             audioEnabled={nodeConfig.enableAudio}
