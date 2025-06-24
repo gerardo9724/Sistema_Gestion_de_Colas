@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Clock, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
+import { ArrowLeft, Clock, Volume2, VolumeX, Wifi, WifiOff, Building } from 'lucide-react';
 
 interface NodeHeaderProps {
   onBack: () => void;
@@ -8,7 +8,10 @@ interface NodeHeaderProps {
   audioEnabled: boolean;
   showDateTime: boolean;
   showConnectionStatus: boolean;
+  showCompanyLogo: boolean; // NEW: Show company logo option
   headerColor: string;
+  companyName?: string; // NEW: Company name
+  companyLogo?: string; // NEW: Company logo URL
 }
 
 export default function NodeHeader({
@@ -18,7 +21,10 @@ export default function NodeHeader({
   audioEnabled,
   showDateTime,
   showConnectionStatus,
-  headerColor
+  showCompanyLogo, // NEW
+  headerColor,
+  companyName = 'Panel de Visualización', // NEW: Default text
+  companyLogo // NEW
 }: NodeHeaderProps) {
   return (
     <div className="bg-opacity-95 backdrop-blur-sm shadow-lg p-3" style={{ backgroundColor: headerColor }}>
@@ -31,7 +37,35 @@ export default function NodeHeader({
           <span className="text-base">Volver</span>
         </button>
         
-        <h1 className="text-2xl font-bold text-white">Panel de Visualización</h1>
+        {/* UPDATED: Header title with optional logo and company name */}
+        <div className="flex items-center space-x-3">
+          {/* Company Logo - only show if enabled and logo exists */}
+          {showCompanyLogo && companyLogo && (
+            <div className="bg-white bg-opacity-20 rounded-lg p-2 backdrop-blur-sm">
+              <img
+                src={companyLogo}
+                alt="Logo de la empresa"
+                className="h-8 w-auto object-contain"
+                onError={(e) => {
+                  // Hide logo if it fails to load
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+          
+          {/* Company Name or Default Title */}
+          <h1 className="text-2xl font-bold text-white">
+            {companyName}
+          </h1>
+          
+          {/* Fallback icon if no logo is shown */}
+          {(!showCompanyLogo || !companyLogo) && (
+            <div className="bg-white bg-opacity-20 rounded-lg p-2 backdrop-blur-sm">
+              <Building size={24} className="text-white" />
+            </div>
+          )}
+        </div>
         
         <div className="flex items-center space-x-3">
           {/* Audio Status */}

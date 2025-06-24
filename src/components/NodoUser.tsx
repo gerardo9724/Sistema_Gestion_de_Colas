@@ -151,6 +151,10 @@ export default function NodoUser() {
   const queueWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-full';
   const carouselWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-0';
 
+  // NEW: Get company information from system settings
+  const companyName = state.systemSettings?.companyName || 'Panel de Visualización';
+  const companyLogo = state.systemSettings?.companyLogo;
+
   return (
     <div className="min-h-screen text-gray-800" style={customStyles}>
       {/* Conditional Header Component */}
@@ -162,7 +166,10 @@ export default function NodoUser() {
           audioEnabled={nodeConfig.enableAudio}
           showDateTime={nodeConfig.showDateTime}
           showConnectionStatus={nodeConfig.showConnectionStatus}
+          showCompanyLogo={nodeConfig.showCompanyLogo} // NEW: Pass logo visibility setting
           headerColor={nodeConfig.headerColor}
+          companyName={companyName} // NEW: Pass company name
+          companyLogo={companyLogo} // NEW: Pass company logo
         />
       )}
 
