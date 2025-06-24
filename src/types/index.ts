@@ -102,7 +102,7 @@ export interface SystemSettings {
   updatedAt: Date;
 }
 
-// UPDATED: Independent Node Configuration Interface with showStatusBar
+// UPDATED: Independent Node Configuration Interface with showCompanyName
 export interface NodeConfiguration {
   id: string;
   
@@ -110,12 +110,13 @@ export interface NodeConfiguration {
   autoRotationInterval: number; // milliseconds
   showQueueInfo: boolean;
   showCompanyLogo: boolean;
+  showCompanyName: boolean; // NEW: Option to show/hide company name in header
   maxTicketsDisplayed: number;
   showDateTime: boolean;
   showConnectionStatus: boolean;
   showHeader: boolean; // Option to show/hide header
   showCarousel: boolean; // Option to show/hide carousel
-  showStatusBar: boolean; // ADDED: Option to show/hide status bar
+  showStatusBar: boolean; // Option to show/hide status bar
   compactMode: boolean;
   
   // Audio Settings

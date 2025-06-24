@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Eye, EyeOff, Monitor, Volume2, VolumeX, Palette, Settings, RotateCcw } from 'lucide-react';
+import { Save, Eye, EyeOff, Monitor, Volume2, VolumeX, Palette, Settings, RotateCcw, Type } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 
 export default function NodeConfiguration() {
@@ -14,12 +14,13 @@ export default function NodeConfiguration() {
     autoRotationInterval: 5000,
     showQueueInfo: true,
     showCompanyLogo: true,
+    showCompanyName: true, // NEW: Company name visibility in header
     maxTicketsDisplayed: 6,
     showDateTime: true,
     showConnectionStatus: true,
     showHeader: true,
     showCarousel: true,
-    showStatusBar: true, // NEW: Status bar visibility
+    showStatusBar: true,
     compactMode: false,
     
     // Audio Settings
@@ -59,12 +60,13 @@ export default function NodeConfiguration() {
         autoRotationInterval: state.nodeConfiguration.autoRotationInterval || 5000,
         showQueueInfo: state.nodeConfiguration.showQueueInfo ?? true,
         showCompanyLogo: state.nodeConfiguration.showCompanyLogo ?? true,
+        showCompanyName: state.nodeConfiguration.showCompanyName ?? true, // NEW: Load company name setting
         maxTicketsDisplayed: state.nodeConfiguration.maxTicketsDisplayed || 6,
         showDateTime: state.nodeConfiguration.showDateTime ?? true,
         showConnectionStatus: state.nodeConfiguration.showConnectionStatus ?? true,
         showHeader: state.nodeConfiguration.showHeader ?? true,
         showCarousel: state.nodeConfiguration.showCarousel ?? true,
-        showStatusBar: state.nodeConfiguration.showStatusBar ?? true, // NEW: Load status bar setting
+        showStatusBar: state.nodeConfiguration.showStatusBar ?? true,
         compactMode: state.nodeConfiguration.compactMode ?? false,
         
         // Audio Settings
@@ -124,12 +126,13 @@ export default function NodeConfiguration() {
         autoRotationInterval: 5000,
         showQueueInfo: true,
         showCompanyLogo: true,
+        showCompanyName: true, // NEW: Default company name to visible
         maxTicketsDisplayed: 6,
         showDateTime: true,
         showConnectionStatus: true,
         showHeader: true,
         showCarousel: true,
-        showStatusBar: true, // NEW: Default status bar to visible
+        showStatusBar: true,
         compactMode: false,
         
         // Audio Settings
@@ -318,6 +321,21 @@ export default function NodeConfiguration() {
                     </div>
                   </label>
                   <p className="text-xs text-green-600 ml-8">El header con navegación, hora y estado será visible</p>
+
+                  {/* NEW: Company Name Visibility Option */}
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.showCompanyName}
+                      onChange={(e) => setConfig({ ...config, showCompanyName: e.target.checked })}
+                      className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <Type size={16} className="text-green-600" />
+                      <span className="text-green-700 font-medium">Mostrar Nombre de Empresa</span>
+                    </div>
+                  </label>
+                  <p className="text-xs text-green-600 ml-8">El nombre de la empresa será visible en el header del módulo nodo</p>
 
                   <label className="flex items-center space-x-3 cursor-pointer">
                     <input

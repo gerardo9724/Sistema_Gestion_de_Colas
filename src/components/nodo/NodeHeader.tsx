@@ -8,10 +8,11 @@ interface NodeHeaderProps {
   audioEnabled: boolean;
   showDateTime: boolean;
   showConnectionStatus: boolean;
-  showCompanyLogo: boolean; // NEW: Show company logo option
+  showCompanyLogo: boolean;
+  showCompanyName: boolean; // NEW: Show company name option
   headerColor: string;
-  companyName?: string; // NEW: Company name
-  companyLogo?: string; // NEW: Company logo URL
+  companyName?: string;
+  companyLogo?: string;
 }
 
 export default function NodeHeader({
@@ -21,23 +22,25 @@ export default function NodeHeader({
   audioEnabled,
   showDateTime,
   showConnectionStatus,
-  showCompanyLogo, // NEW
+  showCompanyLogo,
+  showCompanyName, // NEW
   headerColor,
-  companyName = 'Panel de Visualización', // NEW: Default text
-  companyLogo // NEW
+  companyName = 'Panel de Visualización',
+  companyLogo
 }: NodeHeaderProps) {
   return (
     <div className="bg-opacity-95 backdrop-blur-sm shadow-lg p-3" style={{ backgroundColor: headerColor }}>
       <div className="flex justify-between items-center">
+        {/* UPDATED: Only show arrow icon, no "Volver" text */}
         <button
           onClick={onBack}
-          className="flex items-center space-x-2 text-white hover:text-gray-200 transition-colors"
+          className="flex items-center text-white hover:text-gray-200 transition-colors p-2 rounded-lg hover:bg-white hover:bg-opacity-10"
+          title="Volver al selector de usuarios"
         >
-          <ArrowLeft size={20} />
-          <span className="text-base">Volver</span>
+          <ArrowLeft size={24} />
         </button>
         
-        {/* UPDATED: Header title with optional logo and company name */}
+        {/* UPDATED: Header title with optional logo and conditional company name */}
         <div className="flex items-center space-x-3">
           {/* Company Logo - only show if enabled and logo exists */}
           {showCompanyLogo && companyLogo && (
@@ -54,10 +57,12 @@ export default function NodeHeader({
             </div>
           )}
           
-          {/* Company Name or Default Title */}
-          <h1 className="text-2xl font-bold text-white">
-            {companyName}
-          </h1>
+          {/* Company Name or Default Title - CONDITIONAL RENDERING */}
+          {showCompanyName && (
+            <h1 className="text-2xl font-bold text-white">
+              {companyName}
+            </h1>
+          )}
           
           {/* Fallback icon if no logo is shown */}
           {(!showCompanyLogo || !companyLogo) && (

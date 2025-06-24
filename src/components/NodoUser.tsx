@@ -22,12 +22,13 @@ export default function NodoUser() {
         autoRotationInterval: state.nodeConfiguration.autoRotationInterval,
         showQueueInfo: state.nodeConfiguration.showQueueInfo,
         showCompanyLogo: state.nodeConfiguration.showCompanyLogo,
+        showCompanyName: state.nodeConfiguration.showCompanyName ?? true, // NEW: Company name visibility
         maxTicketsDisplayed: state.nodeConfiguration.maxTicketsDisplayed,
         showDateTime: state.nodeConfiguration.showDateTime,
         showConnectionStatus: state.nodeConfiguration.showConnectionStatus,
         showHeader: state.nodeConfiguration.showHeader ?? true,
         showCarousel: state.nodeConfiguration.showCarousel ?? true,
-        showStatusBar: state.nodeConfiguration.showStatusBar ?? true, // Status bar visibility
+        showStatusBar: state.nodeConfiguration.showStatusBar ?? true,
         compactMode: state.nodeConfiguration.compactMode,
         
         // Audio Settings
@@ -63,12 +64,13 @@ export default function NodoUser() {
         autoRotationInterval: 5000,
         showQueueInfo: true,
         showCompanyLogo: true,
+        showCompanyName: true, // NEW: Default to show company name
         maxTicketsDisplayed: 6,
         showDateTime: true,
         showConnectionStatus: true,
         showHeader: true,
         showCarousel: true,
-        showStatusBar: true, // Default status bar to visible
+        showStatusBar: true,
         compactMode: false,
         enableAudio: true,
         audioVolume: 0.8,
@@ -143,15 +145,14 @@ export default function NodoUser() {
     color: nodeConfig.textColor,
   };
 
-  // FIXED: Calculate content height to maintain original aspect - always reserve space for status bar
-  // This ensures consistent layout regardless of status bar visibility
+  // Calculate content height to maintain original aspect - always reserve space for status bar
   const contentHeight = nodeConfig.showHeader ? 'h-[calc(100vh-120px)]' : 'h-[calc(100vh-40px)]';
 
   // Calculate layout based on carousel visibility
   const queueWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-full';
   const carouselWidth = nodeConfig.showCarousel ? 'w-1/2' : 'w-0';
 
-  // NEW: Get company information from system settings
+  // Get company information from system settings
   const companyName = state.systemSettings?.companyName || 'Panel de Visualización';
   const companyLogo = state.systemSettings?.companyLogo;
 
@@ -166,10 +167,11 @@ export default function NodoUser() {
           audioEnabled={nodeConfig.enableAudio}
           showDateTime={nodeConfig.showDateTime}
           showConnectionStatus={nodeConfig.showConnectionStatus}
-          showCompanyLogo={nodeConfig.showCompanyLogo} // NEW: Pass logo visibility setting
+          showCompanyLogo={nodeConfig.showCompanyLogo}
+          showCompanyName={nodeConfig.showCompanyName} // NEW: Pass company name visibility setting
           headerColor={nodeConfig.headerColor}
-          companyName={companyName} // NEW: Pass company name
-          companyLogo={companyLogo} // NEW: Pass company logo
+          companyName={companyName}
+          companyLogo={companyLogo}
         />
       )}
 

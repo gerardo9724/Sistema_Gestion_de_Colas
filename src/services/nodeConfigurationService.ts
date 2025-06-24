@@ -32,12 +32,13 @@ const convertFirestoreNodeConfiguration = (doc: any): NodeConfiguration => {
     autoRotationInterval: data.autoRotationInterval || 5000,
     showQueueInfo: data.showQueueInfo ?? true,
     showCompanyLogo: data.showCompanyLogo ?? true,
+    showCompanyName: data.showCompanyName ?? true, // NEW: Company name visibility
     maxTicketsDisplayed: data.maxTicketsDisplayed || 6,
     showDateTime: data.showDateTime ?? true,
     showConnectionStatus: data.showConnectionStatus ?? true,
     showHeader: data.showHeader ?? true,
     showCarousel: data.showCarousel ?? true,
-    showStatusBar: data.showStatusBar ?? true, // ADDED: Status bar visibility
+    showStatusBar: data.showStatusBar ?? true,
     compactMode: data.compactMode ?? false,
     
     // Audio Settings
@@ -109,12 +110,13 @@ export const nodeConfigurationService = {
         autoRotationInterval: 5000,
         showQueueInfo: true,
         showCompanyLogo: true,
+        showCompanyName: true, // NEW: Default to show company name
         maxTicketsDisplayed: 6,
         showDateTime: true,
         showConnectionStatus: true,
         showHeader: true,
         showCarousel: true,
-        showStatusBar: true, // ADDED: Default status bar to visible
+        showStatusBar: true,
         compactMode: false,
         
         // Audio Settings
@@ -235,12 +237,13 @@ export const nodeConfigurationService = {
           autoRotationInterval: config.autoRotationInterval || 5000,
           showQueueInfo: config.showQueueInfo ?? true,
           showCompanyLogo: config.showCompanyLogo ?? true,
+          showCompanyName: config.showCompanyName ?? true, // NEW: Company name visibility
           maxTicketsDisplayed: config.maxTicketsDisplayed || 6,
           showDateTime: config.showDateTime ?? true,
           showConnectionStatus: config.showConnectionStatus ?? true,
           showHeader: config.showHeader ?? true,
           showCarousel: config.showCarousel ?? true,
-          showStatusBar: config.showStatusBar ?? true, // ADDED: Status bar visibility
+          showStatusBar: config.showStatusBar ?? true,
           compactMode: config.compactMode ?? false,
           
           // Audio Settings
