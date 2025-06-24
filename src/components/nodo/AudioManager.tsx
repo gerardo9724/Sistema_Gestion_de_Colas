@@ -27,15 +27,17 @@ export default function AudioManager({
   highlightDuration
 }: AudioManagerProps) {
 
-  // Monitor for new tickets being served (for announcements)
+  // FIXED: Monitor for new tickets being served (for announcements) - SINGLE CALL ONLY
   useEffect(() => {
     if (!audioEnabled) return;
 
     const beingServedTickets = tickets.filter(t => t.status === 'being_served');
     
-    // Find newly served tickets
+    // CRITICAL: Find newly served tickets that haven't been announced yet
     const newlyServedTicket = beingServedTickets.find(ticket => {
-      return ticket.id !== lastAnnouncedTicket && ticket.servedAt && 
+      // FIXED: Only announce if this ticket hasn't been announced before AND has a recent servedAt time
+      return ticket.id !== lastAnnouncedTicket && 
+             ticket.servedAt && 
              new Date().getTime() - new Date(ticket.servedAt).getTime() < 5000; // Within last 5 seconds
     });
 
@@ -43,22 +45,26 @@ export default function AudioManager({
       const employee = employees.find(emp => emp.id === newlyServedTicket.servedBy);
       
       if (employee) {
+        console.log('🔊 NEW TICKET CALL DETECTED:', {
+          ticketNumber: newlyServedTicket.number,
+          employeeName: employee.name,
+          lastAnnounced: lastAnnouncedTicket,
+          currentTicket: newlyServedTicket.id
+        });
+
+        // CRITICAL: Mark this ticket as announced IMMEDIATELY to prevent duplicate calls
+        onTicketAnnounced(newlyServedTicket.id);
+        
         // Highlight the ticket IMMEDIATELY
         onTicketHighlighted(newlyServedTicket.id);
-        onTicketAnnounced(newlyServedTicket.id);
         
         // Play notification sound
         playNotificationSound();
         
-        // FIRST announcement after 800ms
+        // SINGLE announcement after 800ms
         setTimeout(() => {
           announceTicket(newlyServedTicket.number, employee.name);
         }, 800);
-        
-        // SECOND announcement after 4.5 seconds (repeat) - FIXED: Longer delay to avoid cutting off
-        setTimeout(() => {
-          announceTicket(newlyServedTicket.number, employee.name);
-        }, 4500);
         
         // Remove highlight after configured duration
         setTimeout(() => {
@@ -166,6 +172,7 @@ export default function AudioManager({
           utterance.pitch = 0.9;
           utterance.volume = audioVolume;
           
+          console.log('🔊 PLAYING SINGLE AUDIO ANNOUNCEMENT:', text);
           speechSynthesis.speak(utterance);
         };
 
