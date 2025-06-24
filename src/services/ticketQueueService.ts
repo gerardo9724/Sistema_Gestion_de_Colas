@@ -86,7 +86,7 @@ export const ticketQueueService = {
     }
   },
 
-  // Derive ticket to another employee
+  // FIXED: Derive ticket to another employee with proper assignment handling
   async deriveTicketToEmployee(
     ticketId: string, 
     fromEmployeeId: string, 
@@ -99,18 +99,38 @@ export const ticketQueueService = {
     }
   ): Promise<void> {
     try {
-      const targetEmployee = await employeeService.getAllEmployees().then(employees => 
-        employees.find(e => e.id === toEmployeeId)
-      );
+      console.log('🔄 STARTING TICKET DERIVATION:', {
+        ticketId,
+        fromEmployeeId,
+        toEmployeeId,
+        options
+      });
+
+      // Get all employees to find target employee
+      const allEmployees = await employeeService.getAllEmployees();
+      const targetEmployee = allEmployees.find(e => e.id === toEmployeeId);
+      const sourceEmployee = allEmployees.find(e => e.id === fromEmployeeId);
 
       if (!targetEmployee) {
         throw new Error('Target employee not found');
       }
 
-      // Check if target employee is available
-      if (targetEmployee.currentTicketId) {
-        // Employee is busy, add to their personal queue
+      if (!sourceEmployee) {
+        throw new Error('Source employee not found');
+      }
+
+      console.log('👥 EMPLOYEES FOUND:', {
+        targetEmployee: { id: targetEmployee.id, name: targetEmployee.name, busy: !!targetEmployee.currentTicketId },
+        sourceEmployee: { id: sourceEmployee.id, name: sourceEmployee.name }
+      });
+
+      // CRITICAL FIX: Check if target employee is available
+      if (targetEmployee.currentTicketId || targetEmployee.isPaused) {
+        console.log('🔄 TARGET EMPLOYEE IS BUSY - ADDING TO PERSONAL QUEUE');
+        
+        // Employee is busy or paused, add to their personal queue
         await ticketService.updateTicket(ticketId, {
+          status: 'waiting', // CRITICAL: Keep as waiting
           queueType: 'personal',
           assignedToEmployee: toEmployeeId,
           derivedFrom: fromEmployeeId,
@@ -119,46 +139,40 @@ export const ticketQueueService = {
           derivationReason: options?.reason,
           serviceType: options?.newServiceType || undefined,
           priority: options?.priority || 'normal',
-          servedBy: undefined, // Clear current assignment
+          // CRITICAL: Clear current serving assignment but keep derivation info
+          servedBy: undefined,
           servedAt: undefined,
         });
 
-        // Create derivation record
-        await ticketDerivationService.createDerivation({
-          ticketId,
-          fromEmployeeId,
-          toEmployeeId,
-          derivationType: 'to_employee',
-          reason: options?.reason,
-          comment: options?.comment,
-          newServiceType: options?.newServiceType,
-        });
-
-        // Update source employee
-        const sourceEmployee = await employeeService.getAllEmployees().then(employees => 
-          employees.find(e => e.id === fromEmployeeId)
+        console.log('✅ TICKET ADDED TO PERSONAL QUEUE');
+      } else {
+        console.log('⚡ TARGET EMPLOYEE IS AVAILABLE - IMMEDIATE ASSIGNMENT');
+        
+        // Employee is available, assign immediately
+        const now = new Date();
+        const originalTicket = await ticketService.getAllTickets().then(tickets => 
+          tickets.find(t => t.id === ticketId)
         );
         
-        if (sourceEmployee) {
-          await employeeService.updateEmployee(fromEmployeeId, {
-            ...sourceEmployee,
-            currentTicketId: undefined,
-            isPaused: true
-          });
+        if (!originalTicket) {
+          throw new Error('Original ticket not found');
         }
-      } else {
-        // Employee is available, assign immediately
+
+        const waitTime = Math.floor((now.getTime() - originalTicket.createdAt.getTime()) / 1000);
+
         await ticketService.updateTicket(ticketId, {
           status: 'being_served',
           servedBy: toEmployeeId,
-          servedAt: new Date(),
+          servedAt: now,
+          waitTime,
           derivedFrom: fromEmployeeId,
           derivedTo: toEmployeeId,
           derivedAt: new Date(),
           derivationReason: options?.reason,
           serviceType: options?.newServiceType || undefined,
           priority: options?.priority || 'normal',
-          queueType: undefined, // Clear queue type when being served
+          // CRITICAL: Clear queue assignment when being served
+          queueType: undefined,
           assignedToEmployee: undefined,
         });
 
@@ -169,32 +183,30 @@ export const ticketQueueService = {
           isPaused: false
         });
 
-        // Update source employee
-        const sourceEmployee = await employeeService.getAllEmployees().then(employees => 
-          employees.find(e => e.id === fromEmployeeId)
-        );
-        
-        if (sourceEmployee) {
-          await employeeService.updateEmployee(fromEmployeeId, {
-            ...sourceEmployee,
-            currentTicketId: undefined,
-            isPaused: true
-          });
-        }
-
-        // Create derivation record
-        await ticketDerivationService.createDerivation({
-          ticketId,
-          fromEmployeeId,
-          toEmployeeId,
-          derivationType: 'to_employee',
-          reason: options?.reason,
-          comment: options?.comment,
-          newServiceType: options?.newServiceType,
-        });
+        console.log('✅ TICKET ASSIGNED IMMEDIATELY TO TARGET EMPLOYEE');
       }
+
+      // ALWAYS update source employee (clear current ticket and pause)
+      await employeeService.updateEmployee(fromEmployeeId, {
+        ...sourceEmployee,
+        currentTicketId: undefined,
+        isPaused: true
+      });
+
+      // Create derivation record
+      await ticketDerivationService.createDerivation({
+        ticketId,
+        fromEmployeeId,
+        toEmployeeId,
+        derivationType: 'to_employee',
+        reason: options?.reason,
+        comment: options?.comment,
+        newServiceType: options?.newServiceType,
+      });
+
+      console.log('✅ DERIVATION COMPLETED SUCCESSFULLY');
     } catch (error) {
-      console.error('Error deriving ticket to employee:', error);
+      console.error('❌ ERROR IN TICKET DERIVATION:', error);
       throw error;
     }
   },
@@ -211,6 +223,8 @@ export const ticketQueueService = {
     }
   ): Promise<void> {
     try {
+      console.log('🔄 DERIVING TICKET TO GENERAL QUEUE:', { ticketId, fromEmployeeId });
+
       // Return ticket to general queue
       await ticketService.updateTicket(ticketId, {
         status: 'waiting',
@@ -226,9 +240,8 @@ export const ticketQueueService = {
       });
 
       // Update source employee
-      const sourceEmployee = await employeeService.getAllEmployees().then(employees => 
-        employees.find(e => e.id === fromEmployeeId)
-      );
+      const allEmployees = await employeeService.getAllEmployees();
+      const sourceEmployee = allEmployees.find(e => e.id === fromEmployeeId);
       
       if (sourceEmployee) {
         await employeeService.updateEmployee(fromEmployeeId, {
@@ -247,33 +260,44 @@ export const ticketQueueService = {
         comment: options?.comment,
         newServiceType: options?.newServiceType,
       });
+
+      console.log('✅ TICKET RETURNED TO GENERAL QUEUE');
     } catch (error) {
-      console.error('Error deriving ticket to general queue:', error);
+      console.error('❌ ERROR DERIVING TO GENERAL QUEUE:', error);
       throw error;
     }
   },
 
-  // Auto-assign next ticket when employee finishes current one
+  // ENHANCED: Auto-assign next ticket when employee finishes current one
   async autoAssignNextTicket(employeeId: string): Promise<Ticket | null> {
     try {
+      console.log('🔄 AUTO-ASSIGNING NEXT TICKET FOR EMPLOYEE:', employeeId);
+
       const nextTicket = await this.getNextTicketForEmployee(employeeId);
       
       if (nextTicket) {
-        const employee = await employeeService.getAllEmployees().then(employees => 
-          employees.find(e => e.id === employeeId)
-        );
+        const allEmployees = await employeeService.getAllEmployees();
+        const employee = allEmployees.find(e => e.id === employeeId);
 
         if (employee && !employee.isPaused) {
+          console.log('🎫 FOUND NEXT TICKET:', {
+            ticketId: nextTicket.id,
+            ticketNumber: nextTicket.number,
+            queueType: nextTicket.queueType || 'general',
+            assignedTo: nextTicket.assignedToEmployee
+          });
+
           // Calculate wait time
           const waitTime = Math.floor((new Date().getTime() - nextTicket.createdAt.getTime()) / 1000);
           
-          // Assign ticket to employee
+          // CRITICAL: Assign ticket to employee with proper field clearing
           await ticketService.updateTicket(nextTicket.id, {
             status: 'being_served',
             servedBy: employeeId,
             servedAt: new Date(),
             waitTime,
-            queueType: undefined, // Clear queue type when being served
+            // CRITICAL: Clear queue-related fields when ticket is being served
+            queueType: undefined,
             assignedToEmployee: undefined,
           });
 
@@ -284,13 +308,18 @@ export const ticketQueueService = {
             isPaused: false
           });
 
+          console.log('✅ NEXT TICKET AUTO-ASSIGNED SUCCESSFULLY');
           return nextTicket;
+        } else {
+          console.log('⏸️ EMPLOYEE IS PAUSED - NO AUTO-ASSIGNMENT');
         }
+      } else {
+        console.log('📭 NO TICKETS AVAILABLE FOR AUTO-ASSIGNMENT');
       }
 
       return null;
     } catch (error) {
-      console.error('Error auto-assigning next ticket:', error);
+      console.error('❌ ERROR IN AUTO-ASSIGNMENT:', error);
       return null;
     }
   },
