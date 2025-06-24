@@ -182,6 +182,13 @@ export const ticketService = {
       if (updateData.completedAt) updateData.completedAt = Timestamp.fromDate(updateData.completedAt);
       if (updateData.cancelledAt) updateData.cancelledAt = Timestamp.fromDate(updateData.cancelledAt);
       
+      // Convert undefined values to null for Firestore compatibility
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+          updateData[key] = null;
+        }
+      });
+      
       await updateDoc(ticketRef, updateData);
     } catch (error) {
       console.error('Error updating ticket:', error);
