@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import type { AppState, Ticket, ServiceCategory, PrintSettings, User, Employee, CarouselImage, ComputerProfile, SystemSettings, NodeConfiguration } from '../types';
+import type { 
+  AppState, 
+  Ticket, 
+  ServiceCategory, 
+  PrintSettings, 
+  User, 
+  Employee, 
+  CarouselImage, 
+  ComputerProfile, 
+  SystemSettings, 
+  NodeConfiguration,
+  EmployeeQueueInfo
+} from '../types';
 import { ticketService } from '../services/ticketService';
 import { serviceService } from '../services/serviceService';
 import { employeeService } from '../services/employeeService';
@@ -9,6 +21,7 @@ import { computerProfileService, getComputerIdentifier } from '../services/compu
 import { systemSettingsService } from '../services/systemSettingsService';
 import { nodeConfigurationService } from '../services/nodeConfigurationService';
 import { printService } from '../services/printService';
+import { employeeQueueService } from '../services/employeeQueueService';
 import { testFirebaseConnection } from '../services/firebase';
 
 // Initial state
@@ -19,7 +32,7 @@ const initialState: AppState = {
   users: [],
   computerProfiles: [],
   systemSettings: null,
-  nodeConfiguration: null, // NEW: Independent node configuration
+  nodeConfiguration: null,
   carouselImages: [],
   ticketTemplates: [],
   cancellationReasons: [],
@@ -38,6 +51,10 @@ const initialState: AppState = {
     autoClose: true,
     testMode: false,
   },
+  
+  // NEW: Employee Queue Management State
+  employeeQueues: {},
+  ticketDerivations: [],
 };
 
 // Action types
@@ -51,7 +68,7 @@ type AppAction =
   | { type: 'SET_USERS'; payload: User[] }
   | { type: 'SET_COMPUTER_PROFILES'; payload: ComputerProfile[] }
   | { type: 'SET_SYSTEM_SETTINGS'; payload: SystemSettings | null }
-  | { type: 'SET_NODE_CONFIGURATION'; payload: NodeConfiguration | null } // NEW
+  | { type: 'SET_NODE_CONFIGURATION'; payload: NodeConfiguration | null }
   | { type: 'SET_CAROUSEL_IMAGES'; payload: CarouselImage[] }
   | { type: 'ADD_TICKET'; payload: Ticket }
   | { type: 'SET_CURRENT_USER'; payload: User | null }
@@ -59,6 +76,7 @@ type AppAction =
   | { type: 'SET_CURRENT_COMPUTER_PROFILE'; payload: ComputerProfile | null }
   | { type: 'SET_AUTHENTICATED'; payload: boolean }
   | { type: 'SET_PRINT_SETTINGS'; payload: Partial<PrintSettings> }
+  | { type: 'SET_EMPLOYEE_QUEUE'; payload: { employeeId: string; queueInfo: EmployeeQueueInfo } }
   | { type: 'LOAD_INITIAL_DATA' }
   | { type: 'LOGOUT' }
   | { type: 'CLEAR_ALL_DATA' };
@@ -93,7 +111,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_SYSTEM_SETTINGS':
       return { ...state, systemSettings: action.payload };
     
-    case 'SET_NODE_CONFIGURATION': // NEW
+    case 'SET_NODE_CONFIGURATION':
       return { ...state, nodeConfiguration: action.payload };
     
     case 'SET_CAROUSEL_IMAGES':
@@ -120,6 +138,15 @@ function appReducer(state: AppState, action: AppAction): AppState {
         printSettings: { ...state.printSettings, ...action.payload } 
       };
     
+    case 'SET_EMPLOYEE_QUEUE':
+      return {
+        ...state,
+        employeeQueues: {
+          ...state.employeeQueues,
+          [action.payload.employeeId]: action.payload.queueInfo
+        }
+      };
+    
     case 'LOGOUT':
       return {
         ...state,
@@ -135,7 +162,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
         printSettings: state.printSettings,
         currentComputerProfile: state.currentComputerProfile,
         systemSettings: state.systemSettings,
-        nodeConfiguration: state.nodeConfiguration, // NEW
+        nodeConfiguration: state.nodeConfiguration,
       };
     
     default:
@@ -151,11 +178,21 @@ const AppContext = createContext<{
   loadInitialData: () => Promise<void>;
   checkComputerProfile: () => Promise<void>;
   updateSystemSettings: (updates: Partial<SystemSettings>) => Promise<void>;
-  updateNodeConfiguration: (updates: Partial<NodeConfiguration>) => Promise<void>; // NEW
-  saveCompleteNodeConfiguration: (config: Partial<NodeConfiguration>) => Promise<void>; // NEW
+  updateNodeConfiguration: (updates: Partial<NodeConfiguration>) => Promise<void>;
+  saveCompleteNodeConfiguration: (config: Partial<NodeConfiguration>) => Promise<void>;
   updatePrintSettings: (settings: Partial<PrintSettings>) => void;
   testPrint: () => Promise<boolean>;
   previewTicket: (ticket: Ticket) => void;
+  
+  // NEW: Employee Queue Management Functions
+  deriveTicketToEmployee: (
+    ticketId: string, 
+    targetEmployeeId: string, 
+    sourceEmployeeId: string,
+    reason?: string
+  ) => Promise<{ success: boolean; message: string }>;
+  processEmployeeQueue: (employeeId: string) => Promise<{ success: boolean; ticket?: Ticket }>;
+  getEmployeeQueueInfo: (employeeId: string) => Promise<EmployeeQueueInfo>;
 } | null>(null);
 
 // Provider
@@ -215,7 +252,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_SYSTEM_SETTINGS', payload: settings });
     });
 
-    // NEW: Subscribe to node configuration
+    // Subscribe to node configuration
     const unsubscribeNodeConfiguration = nodeConfigurationService.subscribeToNodeConfiguration((config) => {
       dispatch({ type: 'SET_NODE_CONFIGURATION', payload: config });
     });
@@ -225,6 +262,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_CAROUSEL_IMAGES', payload: images });
     });
 
+    // NEW: Subscribe to employee queues if current employee is set
+    let unsubscribeEmployeeQueue: (() => void) | null = null;
+    if (state.currentEmployee) {
+      unsubscribeEmployeeQueue = employeeQueueService.subscribeToEmployeeQueue(
+        state.currentEmployee.id,
+        (queueTickets) => {
+          dispatch({
+            type: 'SET_EMPLOYEE_QUEUE',
+            payload: {
+              employeeId: state.currentEmployee!.id,
+              queueInfo: {
+                employeeId: state.currentEmployee!.id,
+                personalQueue: queueTickets,
+                isProcessingQueue: false,
+                nextTicketInQueue: queueTickets.length > 0 ? queueTickets[0] : undefined,
+                queueProcessingPaused: false
+              }
+            }
+          });
+        }
+      );
+    }
+
     return () => {
       console.log('Cleaning up real-time listeners...');
       unsubscribeTickets();
@@ -233,10 +293,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubscribeUsers();
       unsubscribeComputerProfiles();
       unsubscribeSystemSettings();
-      unsubscribeNodeConfiguration(); // NEW
+      unsubscribeNodeConfiguration();
       unsubscribeCarousel();
+      if (unsubscribeEmployeeQueue) unsubscribeEmployeeQueue();
     };
-  }, [state.isFirebaseConnected]);
+  }, [state.isFirebaseConnected, state.currentEmployee?.id]);
 
   // Check computer profile and auto-assign if configured
   const checkComputerProfile = async () => {
@@ -306,7 +367,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         userService.getAllUsers(),
         computerProfileService.getAllComputerProfiles(),
         systemSettingsService.getSystemSettings(),
-        nodeConfigurationService.getNodeConfiguration(), // NEW
+        nodeConfigurationService.getNodeConfiguration(),
         carouselService.getAllCarouselImages(),
       ]);
 
@@ -316,8 +377,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_USERS', payload: users });
       dispatch({ type: 'SET_COMPUTER_PROFILES', payload: computerProfiles });
       dispatch({ type: 'SET_SYSTEM_SETTINGS', payload: systemSettings });
-      dispatch({ type: 'SET_NODE_CONFIGURATION', payload: nodeConfiguration }); // NEW
+      dispatch({ type: 'SET_NODE_CONFIGURATION', payload: nodeConfiguration });
       dispatch({ type: 'SET_CAROUSEL_IMAGES', payload: carouselImages });
+
+      // NEW: Load employee queues if current employee is set
+      if (state.currentEmployee) {
+        const queueInfo = await employeeQueueService.getEmployeeQueueInfo(state.currentEmployee.id);
+        dispatch({
+          type: 'SET_EMPLOYEE_QUEUE',
+          payload: {
+            employeeId: state.currentEmployee.id,
+            queueInfo
+          }
+        });
+      }
 
       console.log('Initial data loaded successfully');
     } catch (error) {
@@ -342,7 +415,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // NEW: Update node configuration
+  // Update node configuration
   const updateNodeConfiguration = async (updates: Partial<NodeConfiguration>) => {
     try {
       const existingConfig = state.nodeConfiguration;
@@ -358,7 +431,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // NEW: Save complete node configuration
+  // Save complete node configuration
   const saveCompleteNodeConfiguration = async (config: Partial<NodeConfiguration>) => {
     try {
       await nodeConfigurationService.saveCompleteConfiguration(config);
@@ -441,6 +514,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  // NEW: Derive ticket to employee
+  const deriveTicketToEmployee = async (
+    ticketId: string, 
+    targetEmployeeId: string, 
+    sourceEmployeeId: string,
+    reason?: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      return await employeeQueueService.deriveTicketToEmployee(
+        ticketId,
+        targetEmployeeId,
+        sourceEmployeeId,
+        reason
+      );
+    } catch (error) {
+      console.error('Error deriving ticket to employee:', error);
+      return { success: false, message: 'Error al derivar ticket' };
+    }
+  };
+
+  // NEW: Process employee queue
+  const processEmployeeQueue = async (employeeId: string): Promise<{ success: boolean; ticket?: Ticket }> => {
+    try {
+      return await employeeQueueService.processEmployeePersonalQueue(employeeId);
+    } catch (error) {
+      console.error('Error processing employee queue:', error);
+      return { success: false };
+    }
+  };
+
+  // NEW: Get employee queue info
+  const getEmployeeQueueInfo = async (employeeId: string): Promise<EmployeeQueueInfo> => {
+    try {
+      return await employeeQueueService.getEmployeeQueueInfo(employeeId);
+    } catch (error) {
+      console.error('Error getting employee queue info:', error);
+      return {
+        employeeId,
+        personalQueue: [],
+        isProcessingQueue: false,
+        nextTicketInQueue: undefined,
+        queueProcessingPaused: false
+      };
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       state,
@@ -449,11 +568,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadInitialData,
       checkComputerProfile,
       updateSystemSettings,
-      updateNodeConfiguration, // NEW
-      saveCompleteNodeConfiguration, // NEW
+      updateNodeConfiguration,
+      saveCompleteNodeConfiguration,
       updatePrintSettings,
       testPrint,
       previewTicket,
+      
+      // NEW: Employee Queue Management Functions
+      deriveTicketToEmployee,
+      processEmployeeQueue,
+      getEmployeeQueueInfo,
     }}>
       {children}
     </AppContext.Provider>

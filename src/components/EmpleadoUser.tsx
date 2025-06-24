@@ -14,13 +14,17 @@ import {
   Timer,
   Key,
   Volume2,
-  ArrowRight
+  ArrowRight,
+  List,
+  UserCheck
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { authService } from '../services/authService';
 import { ticketService } from '../services/ticketService';
 import { employeeService } from '../services/employeeService';
+import { employeeQueueService } from '../services/employeeQueueService';
 import DeriveTicketModal from './employee/DeriveTicketModal';
+import type { Ticket } from '../types';
 
 type TabType = 'queue' | 'profile';
 
@@ -49,6 +53,10 @@ export default function EmpleadoUser() {
   const [isRecalling, setIsRecalling] = useState(false);
   const [recallSuccess, setRecallSuccess] = useState(false);
 
+  // NEW: Employee Queue State
+  const [personalQueue, setPersonalQueue] = useState<Ticket[]>([]);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
   
@@ -60,6 +68,23 @@ export default function EmpleadoUser() {
   const currentTicket = state.tickets.find(ticket => 
     ticket.status === 'being_served' && ticket.servedBy === currentEmployee?.id
   );
+
+  // NEW: Subscribe to employee's personal queue
+  useEffect(() => {
+    if (!currentEmployee?.id) return;
+
+    console.log('🔄 Setting up personal queue subscription for employee:', currentEmployee.id);
+    
+    const unsubscribe = employeeQueueService.subscribeToEmployeeQueue(
+      currentEmployee.id,
+      (queueTickets) => {
+        console.log('📋 Personal queue updated:', queueTickets.length, 'tickets');
+        setPersonalQueue(queueTickets);
+      }
+    );
+
+    return unsubscribe;
+  }, [currentEmployee?.id]);
 
   // FIXED: Complete state restoration when employee has active ticket - PREVENT TIMER RESET ON RECALLS
   useEffect(() => {
@@ -171,6 +196,38 @@ export default function EmpleadoUser() {
     return () => clearInterval(interval);
   }, [isTimerRunning, originalServiceStartTime]); // Use originalServiceStartTime instead of serviceStartTime
 
+  // NEW: Auto-process personal queue when employee becomes available
+  useEffect(() => {
+    const autoProcessQueue = async () => {
+      if (!currentEmployee?.id || currentTicket || isPaused || personalQueue.length === 0) {
+        return;
+      }
+
+      // Check if employee has auto-process enabled
+      if (actualEmployee?.autoProcessPersonalQueue === false) {
+        return;
+      }
+
+      console.log('🔄 AUTO-PROCESSING PERSONAL QUEUE - Employee available, processing next ticket');
+      setIsProcessingQueue(true);
+
+      try {
+        const result = await employeeQueueService.processEmployeePersonalQueue(currentEmployee.id);
+        if (result.success && result.ticket) {
+          console.log('✅ Auto-assigned ticket from personal queue:', result.ticket.number);
+        }
+      } catch (error) {
+        console.error('Error auto-processing personal queue:', error);
+      } finally {
+        setIsProcessingQueue(false);
+      }
+    };
+
+    // Small delay to ensure state is stable
+    const timeoutId = setTimeout(autoProcessQueue, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [currentEmployee?.id, currentTicket, isPaused, personalQueue.length, actualEmployee?.autoProcessPersonalQueue]);
+
   const handleLogout = () => {
     dispatch({ type: 'LOGOUT' });
   };
@@ -249,6 +306,51 @@ export default function EmpleadoUser() {
     }
   };
 
+  // NEW: Handle taking ticket from personal queue
+  const handleTakeFromPersonalQueue = async (ticketId: string) => {
+    if (!currentEmployee || currentTicket) return;
+
+    try {
+      const now = new Date();
+      const ticket = personalQueue.find(t => t.id === ticketId);
+      if (!ticket) return;
+
+      const waitTime = ticket.queuedAt 
+        ? Math.floor((now.getTime() - new Date(ticket.queuedAt).getTime()) / 1000)
+        : Math.floor((now.getTime() - ticket.createdAt.getTime()) / 1000);
+      
+      await ticketService.updateTicket(ticketId, {
+        status: 'being_served',
+        servedBy: currentEmployee.id,
+        servedAt: now,
+        waitTime,
+        queuedForEmployee: undefined,
+        queuedAt: undefined,
+        queuePositionForEmployee: undefined
+      });
+
+      await employeeService.updateEmployee(currentEmployee.id, {
+        ...currentEmployee,
+        currentTicketId: ticketId,
+        isPaused: false
+      });
+
+      // Update queue positions for remaining tickets
+      await employeeQueueService.updateQueuePositions(currentEmployee.id);
+
+      // CRITICAL: Set timer for personal queue ticket
+      console.log('🆕 Taking ticket from personal queue - Setting original timer:', now);
+      setCurrentTicketId(ticketId);
+      setOriginalServiceStartTime(now);
+      setServiceStartTime(now);
+      setElapsedTime(0);
+      setIsTimerRunning(true);
+    } catch (error) {
+      console.error('Error taking ticket from personal queue:', error);
+      alert('Error al tomar ticket de cola personal');
+    }
+  };
+
   const handleCompleteTicket = async (ticketId: string, callNext: boolean = false) => {
     if (!currentEmployee || !originalServiceStartTime) return; // Use originalServiceStartTime
 
@@ -270,7 +372,7 @@ export default function EmpleadoUser() {
         ...currentEmployee,
         currentTicketId: undefined,
         totalTicketsServed: currentEmployee.totalTicketsServed + 1,
-        isPaused: !callNext
+        isPaused: !callNext && personalQueue.length === 0 // Don't pause if there are tickets in personal queue
       });
       
       // CRITICAL: Reset all timer state
@@ -282,12 +384,18 @@ export default function EmpleadoUser() {
       setIsTimerRunning(false);
 
       if (callNext) {
-        const waitingTickets = state.tickets
-          .filter(t => t.status === 'waiting')
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        
-        if (waitingTickets.length > 0) {
-          setTimeout(() => handleStartService(waitingTickets[0].id), 500);
+        // First check personal queue, then general queue
+        if (personalQueue.length > 0) {
+          console.log('📋 Taking next ticket from personal queue');
+          setTimeout(() => handleTakeFromPersonalQueue(personalQueue[0].id), 500);
+        } else {
+          const waitingTickets = state.tickets
+            .filter(t => t.status === 'waiting')
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          
+          if (waitingTickets.length > 0) {
+            setTimeout(() => handleStartService(waitingTickets[0].id), 500);
+          }
         }
       }
     } catch (error) {
@@ -344,7 +452,7 @@ export default function EmpleadoUser() {
     }
   };
 
-  // UPDATED: Handle ticket derivation - NO POP-UP CONFIRMATION
+  // UPDATED: Handle ticket derivation with employee queue support
   const handleDeriveTicket = async (targetType: 'queue' | 'employee', targetId?: string, newServiceType?: string) => {
     if (!currentEmployee || !currentTicket) return;
 
@@ -358,36 +466,27 @@ export default function EmpleadoUser() {
           serviceType: newServiceType || currentTicket.serviceType
         });
       } else if (targetType === 'employee' && targetId) {
-        // Assign to specific employee
-        const targetEmployee = state.employees.find(e => e.id === targetId);
-        if (!targetEmployee) {
-          alert('Empleado destino no encontrado');
+        // NEW: Use employee queue service for smart derivation
+        const result = await employeeQueueService.deriveTicketToEmployee(
+          currentTicket.id,
+          targetId,
+          currentEmployee.id,
+          'Derivado por empleado'
+        );
+
+        if (!result.success) {
+          alert(result.message);
           return;
         }
 
-        if (targetEmployee.currentTicketId) {
-          alert('El empleado destino ya tiene un ticket asignado');
-          return;
-        }
-
-        await ticketService.updateTicket(currentTicket.id, {
-          servedBy: targetId,
-          servedAt: new Date(),
-          serviceType: newServiceType || currentTicket.serviceType
-        });
-
-        await employeeService.updateEmployee(targetId, {
-          ...targetEmployee,
-          currentTicketId: currentTicket.id,
-          isPaused: false
-        });
+        console.log('✅ Ticket derivation result:', result.message);
       }
 
       // Update current employee
       await employeeService.updateEmployee(currentEmployee.id, {
         ...currentEmployee,
         currentTicketId: undefined,
-        isPaused: true
+        isPaused: personalQueue.length === 0 // Don't pause if there are tickets in personal queue
       });
 
       // CRITICAL: Reset all timer state
@@ -436,7 +535,7 @@ export default function EmpleadoUser() {
         ...currentEmployee,
         currentTicketId: undefined,
         totalTicketsCancelled: currentEmployee.totalTicketsCancelled + 1,
-        isPaused: true
+        isPaused: personalQueue.length === 0 // Don't pause if there are tickets in personal queue
       });
 
       // CRITICAL: Reset all timer state
@@ -516,15 +615,21 @@ export default function EmpleadoUser() {
             <Coffee size={64} className="mx-auto text-orange-400 mb-4" />
             <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
             <p className="text-lg text-gray-600 mb-6">
-              {waitingTickets.length > 0 
-                ? 'Presiona "Reanudar" para comenzar a atender tickets'
-                : 'No hay tickets pendientes. Esperando nuevos tickets...'
+              {personalQueue.length > 0 
+                ? `Tienes ${personalQueue.length} ticket(s) en tu cola personal. Presiona "Reanudar" para procesarlos.`
+                : waitingTickets.length > 0 
+                  ? 'Presiona "Reanudar" para comenzar a atender tickets'
+                  : 'No hay tickets pendientes. Esperando nuevos tickets...'
               }
             </p>
-            {waitingTickets.length > 0 && (
+            {(personalQueue.length > 0 || waitingTickets.length > 0) && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                 <p className="text-yellow-800 text-sm mb-2">
-                  <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
+                  <strong>Próximo ticket:</strong> 
+                  {personalQueue.length > 0 
+                    ? ` #${personalQueue[0].number.toString().padStart(3, '0'))} - ${personalQueue[0].serviceType} (Cola Personal)`
+                    : ` #${waitingTickets[0].number.toString().padStart(3, '0'))} - ${waitingTickets[0].serviceType} (Cola General)`
+                  }
                 </p>
                 <p className="text-yellow-700 text-xs">
                   Al reanudar, automáticamente tomarás este ticket para atención
@@ -533,9 +638,9 @@ export default function EmpleadoUser() {
             )}
             <button
               onClick={handleTogglePause}
-              disabled={waitingTickets.length === 0}
+              disabled={personalQueue.length === 0 && waitingTickets.length === 0}
               className={`py-3 px-8 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2 mx-auto ${
-                waitingTickets.length > 0
+                (personalQueue.length > 0 || waitingTickets.length > 0)
                   ? 'bg-green-500 hover:bg-green-600 text-white'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
@@ -561,6 +666,12 @@ export default function EmpleadoUser() {
                   {currentTicket.waitTime && (
                     <div className="text-sm text-gray-500">
                       Tiempo de espera: {formatTime(currentTicket.waitTime)}
+                    </div>
+                  )}
+                  {/* NEW: Show if ticket was derived */}
+                  {currentTicket.derivedFrom && (
+                    <div className="text-sm text-purple-600 font-medium">
+                      📤 Ticket derivado de otro empleado
                     </div>
                   )}
                 </div>
@@ -659,79 +770,157 @@ export default function EmpleadoUser() {
             <User size={64} className="mx-auto text-gray-300 mb-4" />
             <p className="text-xl text-gray-500">No hay tickets en atención</p>
             <p className="text-gray-400">
-              {waitingTickets.length > 0 
-                ? 'Presiona "Reanudar" para tomar el siguiente ticket'
-                : 'Esperando nuevos tickets...'
+              {personalQueue.length > 0 
+                ? `Tienes ${personalQueue.length} ticket(s) en tu cola personal`
+                : waitingTickets.length > 0 
+                  ? 'Presiona "Reanudar" para tomar el siguiente ticket'
+                  : 'Esperando nuevos tickets...'
               }
             </p>
           </div>
         )}
       </div>
 
-      {/* Waiting Queue */}
-      <div className="bg-white rounded-2xl shadow-xl p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          Cola de Espera ({waitingTickets.length})
-        </h2>
-        
-        <div className="space-y-4 max-h-96 overflow-y-auto">
-          {waitingTickets.map((ticket, index) => {
-            const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
+      {/* Queue Management - Updated to show both personal and general queues */}
+      <div className="space-y-6">
+        {/* NEW: Personal Queue */}
+        {personalQueue.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-xl p-6">
+            <h2 className="text-2xl font-bold text-purple-800 mb-6 flex items-center space-x-2">
+              <UserCheck size={28} />
+              <span>Mi Cola Personal ({personalQueue.length})</span>
+            </h2>
             
-            return (
-              <div
-                key={ticket.id}
-                className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                  index === 0 
-                    ? 'border-yellow-400 bg-yellow-50' 
-                    : 'border-gray-200 bg-gray-50'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="flex items-center space-x-3">
-                      <div className="text-2xl font-bold text-gray-800">
-                        #{ticket.number.toString().padStart(3, '0')}
-                      </div>
-                      {index === 0 && (
-                        <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full">
-                          SIGUIENTE
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-lg font-semibold text-gray-600">
-                      {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {ticket.createdAt.toLocaleTimeString()}
-                    </div>
-                    <div className="text-sm text-orange-600 font-medium">
-                      Esperando: {formatTime(waitTime)}
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={() => handleStartService(ticket.id)}
-                    disabled={currentTicket !== undefined || index !== 0 || isPaused}
-                    className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
-                      index === 0 && !currentTicket && !isPaused
-                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            <div className="space-y-4 max-h-64 overflow-y-auto">
+              {personalQueue.map((ticket, index) => {
+                const waitTime = ticket.queuedAt 
+                  ? Math.floor((new Date().getTime() - new Date(ticket.queuedAt).getTime()) / 1000)
+                  : Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
+                
+                return (
+                  <div
+                    key={ticket.id}
+                    className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                      index === 0 
+                        ? 'border-purple-400 bg-purple-50' 
+                        : 'border-purple-200 bg-purple-25'
                     }`}
                   >
-                    {index === 0 && isPaused ? 'Reanudar primero' : index === 0 ? 'Atender' : 'Esperar turno'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-          
-          {waitingTickets.length === 0 && (
-            <div className="text-center py-12">
-              <Clock size={64} className="mx-auto text-gray-300 mb-4" />
-              <p className="text-xl text-gray-500">No hay tickets en espera</p>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl font-bold text-purple-800">
+                            #{ticket.number.toString().padStart(3, '0')}
+                          </div>
+                          {index === 0 && (
+                            <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2 py-1 rounded-full">
+                              SIGUIENTE EN MI COLA
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-lg font-semibold text-purple-600">
+                          {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
+                        </div>
+                        <div className="text-sm text-purple-500">
+                          Derivado: {ticket.queuedAt ? new Date(ticket.queuedAt).toLocaleTimeString() : 'N/A'}
+                        </div>
+                        <div className="text-sm text-purple-600 font-medium">
+                          En cola: {formatTime(waitTime)}
+                        </div>
+                        {ticket.derivedFrom && (
+                          <div className="text-xs text-purple-500">
+                            📤 Derivado por otro empleado
+                          </div>
+                        )}
+                      </div>
+                      
+                      <button
+                        onClick={() => handleTakeFromPersonalQueue(ticket.id)}
+                        disabled={currentTicket !== undefined || index !== 0 || isPaused}
+                        className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                          index === 0 && !currentTicket && !isPaused
+                            ? 'bg-purple-500 hover:bg-purple-600 text-white'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {index === 0 && isPaused ? 'Reanudar primero' : index === 0 ? 'Atender Ahora' : 'Esperar turno'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
+        )}
+
+        {/* General Queue */}
+        <div className="bg-white rounded-2xl shadow-xl p-6">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
+            <Clock size={28} />
+            <span>Cola General ({waitingTickets.length})</span>
+          </h2>
+          
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {waitingTickets.map((ticket, index) => {
+              const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
+              
+              return (
+                <div
+                  key={ticket.id}
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                    index === 0 
+                      ? 'border-yellow-400 bg-yellow-50' 
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="flex items-center space-x-3">
+                        <div className="text-2xl font-bold text-gray-800">
+                          #{ticket.number.toString().padStart(3, '0')}
+                        </div>
+                        {index === 0 && (
+                          <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full">
+                            SIGUIENTE
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-lg font-semibold text-gray-600">
+                        {ticket.serviceType.charAt(0).toUpperCase() + ticket.serviceType.slice(1)}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {ticket.createdAt.toLocaleTimeString()}
+                      </div>
+                      <div className="text-sm text-orange-600 font-medium">
+                        Esperando: {formatTime(waitTime)}
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => handleStartService(ticket.id)}
+                      disabled={currentTicket !== undefined || index !== 0 || isPaused || personalQueue.length > 0}
+                      className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                        index === 0 && !currentTicket && !isPaused && personalQueue.length === 0
+                          ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {index === 0 && isPaused ? 'Reanudar primero' : 
+                       index === 0 && personalQueue.length > 0 ? 'Procesar cola personal primero' :
+                       index === 0 ? 'Atender' : 'Esperar turno'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            
+            {waitingTickets.length === 0 && (
+              <div className="text-center py-12">
+                <Clock size={64} className="mx-auto text-gray-300 mb-4" />
+                <p className="text-xl text-gray-500">No hay tickets en espera</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -819,6 +1008,24 @@ export default function EmpleadoUser() {
                       )}
                     </div>
                   </div>
+                  {/* NEW: Personal Queue Status */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">Cola Personal</label>
+                    <div className="p-3 bg-white border border-blue-300 rounded-lg">
+                      {personalQueue.length > 0 ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-purple-800 font-semibold">
+                            {personalQueue.length} ticket(s) en cola personal
+                          </span>
+                          <span className="text-xs text-purple-600">
+                            Próximo: #{personalQueue[0].number.toString().padStart(3, '0')}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">Cola personal vacía</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -870,6 +1077,8 @@ export default function EmpleadoUser() {
                 <li>• <strong>El estado del empleado se mantiene al cerrar y abrir el sistema</strong></li>
                 <li>• <strong>Si tienes un ticket en atención, se restaurará automáticamente</strong></li>
                 <li>• <strong>⏰ El cronómetro NO se reinicia al usar "Volver a llamar"</strong></li>
+                <li>• <strong>📋 Los tickets derivados a ti aparecen en tu cola personal</strong></li>
+                <li>• <strong>🔄 Tu cola personal se procesa automáticamente cuando estás disponible</strong></li>
               </ul>
             </div>
           </div>
@@ -924,6 +1133,18 @@ export default function EmpleadoUser() {
                   </div>
                   <div className="text-green-600 text-xs">
                     {originalServiceStartTime ? formatTime(elapsedTime) : 'Iniciando...'}
+                  </div>
+                </div>
+              )}
+              {/* NEW: Personal Queue Indicator in Header */}
+              {personalQueue.length > 0 && (
+                <div className="bg-purple-100 border border-purple-300 rounded-lg px-3 py-2">
+                  <div className="text-purple-800 font-semibold text-sm flex items-center space-x-1">
+                    <List size={16} />
+                    <span>Cola Personal: {personalQueue.length}</span>
+                  </div>
+                  <div className="text-purple-600 text-xs">
+                    Próximo: #{personalQueue[0].number.toString().padStart(3, '0')}
                   </div>
                 </div>
               )}
@@ -1160,7 +1381,7 @@ export default function EmpleadoUser() {
         </div>
       )}
 
-      {/* NEW: Derive Ticket Modal */}
+      {/* NEW: Enhanced Derive Ticket Modal with Employee Queue Support */}
       {showDeriveModal && currentTicket && (
         <DeriveTicketModal
           ticket={currentTicket}

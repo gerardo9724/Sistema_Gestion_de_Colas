@@ -1,16 +1,63 @@
-import React, { useState } from 'react';
-import { Users, Settings, BarChart3, Clock, User, CheckCircle, XCircle, Pause, Play, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Users, Settings, BarChart3, Clock, User, CheckCircle, XCircle, Pause, Play, ArrowRight, List, UserCheck } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { employeeService } from '../../services/employeeService';
 import { ticketService } from '../../services/ticketService';
-import type { Employee, Ticket } from '../../types';
+import { employeeQueueService } from '../../services/employeeQueueService';
+import type { Employee, Ticket, EmployeeQueueInfo } from '../../types';
 
 export default function EmployeeManagement() {
-  const { state } = useApp();
+  const { state, getEmployeeQueueInfo } = useApp();
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showDeriveModal, setShowDeriveModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [employeeQueues, setEmployeeQueues] = useState<{[employeeId: string]: EmployeeQueueInfo}>({});
+
+  // Load employee queues on mount
+  useEffect(() => {
+    const loadEmployeeQueues = async () => {
+      const queues: {[employeeId: string]: EmployeeQueueInfo} = {};
+      
+      for (const employee of state.employees) {
+        if (employee.isActive) {
+          try {
+            const queueInfo = await getEmployeeQueueInfo(employee.id);
+            queues[employee.id] = queueInfo;
+          } catch (error) {
+            console.error(`Error loading queue for employee ${employee.id}:`, error);
+          }
+        }
+      }
+      
+      setEmployeeQueues(queues);
+    };
+    
+    loadEmployeeQueues();
+  }, [state.employees, getEmployeeQueueInfo]);
+
+  // Refresh employee queues when tickets change
+  useEffect(() => {
+    const refreshEmployeeQueues = async () => {
+      const activeEmployeeIds = state.employees
+        .filter(e => e.isActive)
+        .map(e => e.id);
+      
+      for (const employeeId of activeEmployeeIds) {
+        try {
+          const queueInfo = await getEmployeeQueueInfo(employeeId);
+          setEmployeeQueues(prev => ({
+            ...prev,
+            [employeeId]: queueInfo
+          }));
+        } catch (error) {
+          console.error(`Error refreshing queue for employee ${employeeId}:`, error);
+        }
+      }
+    };
+    
+    refreshEmployeeQueues();
+  }, [state.tickets, state.employees, getEmployeeQueueInfo]);
 
   const handleToggleEmployeePause = async (employee: Employee) => {
     if (employee.currentTicketId) {
@@ -62,6 +109,12 @@ export default function EmployeeManagement() {
             totalTicketsServed: employee.totalTicketsServed + 1,
             isPaused: true
           });
+          
+          // Process next ticket in employee's queue if available
+          const queueInfo = employeeQueues[employee.id];
+          if (queueInfo && queueInfo.personalQueue.length > 0) {
+            await employeeQueueService.processEmployeePersonalQueue(employee.id);
+          }
         }
       }
 
@@ -77,24 +130,21 @@ export default function EmployeeManagement() {
   const handleDeriveTicket = async (ticket: Ticket, targetEmployeeId: string) => {
     setIsLoading(true);
     try {
-      const targetEmployee = state.employees.find(e => e.id === targetEmployeeId);
-      if (!targetEmployee) {
-        alert('Empleado destino no encontrado');
+      const sourceEmployeeId = ticket.servedBy || 'admin';
+      
+      const result = await employeeQueueService.deriveTicketToEmployee(
+        ticket.id,
+        targetEmployeeId,
+        sourceEmployeeId,
+        'Derivado por administrador'
+      );
+      
+      if (!result.success) {
+        alert(result.message);
         return;
       }
 
-      if (targetEmployee.currentTicketId) {
-        alert('El empleado destino ya tiene un ticket asignado');
-        return;
-      }
-
-      // Update ticket
-      await ticketService.updateTicket(ticket.id, {
-        servedBy: targetEmployeeId,
-        servedAt: new Date()
-      });
-
-      // Update source employee
+      // If ticket was being served, update source employee
       if (ticket.servedBy) {
         const sourceEmployee = state.employees.find(e => e.id === ticket.servedBy);
         if (sourceEmployee) {
@@ -106,16 +156,9 @@ export default function EmployeeManagement() {
         }
       }
 
-      // Update target employee
-      await employeeService.updateEmployee(targetEmployeeId, {
-        ...targetEmployee,
-        currentTicketId: ticket.id,
-        isPaused: false
-      });
-
       setShowDeriveModal(false);
       setSelectedTicket(null);
-      alert('Ticket derivado exitosamente');
+      alert(result.message);
     } catch (error) {
       console.error('Error deriving ticket:', error);
       alert('Error al derivar ticket');
@@ -169,6 +212,8 @@ export default function EmployeeManagement() {
           {state.employees.map((employee) => {
             const currentTicket = getEmployeeCurrentTicket(employee);
             const serviceTime = currentTicket ? getServiceTime(currentTicket) : 0;
+            const queueInfo = employeeQueues[employee.id];
+            const personalQueueCount = queueInfo?.personalQueue.length || 0;
 
             return (
               <div key={employee.id} className="border border-gray-200 rounded-xl p-6 bg-gray-50">
@@ -186,6 +231,16 @@ export default function EmployeeManagement() {
                     <div>
                       <h3 className="text-lg font-semibold text-gray-800">{employee.name}</h3>
                       <p className="text-gray-600">{employee.position}</p>
+                      
+                      {/* NEW: Personal Queue Indicator */}
+                      {personalQueueCount > 0 && (
+                        <div className="flex items-center space-x-1 mt-1">
+                          <List size={14} className="text-purple-600" />
+                          <span className="text-xs font-medium text-purple-600">
+                            {personalQueueCount} en cola personal
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   
@@ -229,6 +284,13 @@ export default function EmployeeManagement() {
                       <div>Servicio: {currentTicket.serviceType.toUpperCase()}</div>
                       <div>Tiempo: {formatTime(serviceTime)}</div>
                       <div>Iniciado: {currentTicket.servedAt ? new Date(currentTicket.servedAt).toLocaleTimeString() : 'N/A'}</div>
+                      
+                      {/* NEW: Show derivation info */}
+                      {currentTicket.derivedFrom && (
+                        <div className="text-purple-600 font-medium text-xs mt-1">
+                          Derivado de otro empleado
+                        </div>
+                      )}
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -254,6 +316,34 @@ export default function EmployeeManagement() {
                     <div className="text-center text-gray-500">
                       <Clock size={32} className="mx-auto mb-2 opacity-50" />
                       <p className="text-sm">Sin ticket asignado</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* NEW: Personal Queue Section */}
+                {personalQueueCount > 0 && (
+                  <div className="bg-white rounded-lg p-4 mb-4 border border-purple-200">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="font-semibold text-purple-800 flex items-center space-x-1">
+                        <UserCheck size={16} />
+                        <span>Cola Personal</span>
+                      </h4>
+                      <span className="text-sm font-bold text-purple-600">
+                        {personalQueueCount} ticket(s)
+                      </span>
+                    </div>
+                    
+                    <div className="max-h-32 overflow-y-auto">
+                      {queueInfo?.personalQueue.map((ticket, index) => (
+                        <div key={ticket.id} className="text-sm border-b border-purple-100 py-1 flex justify-between">
+                          <span className="font-medium">
+                            #{ticket.number.toString().padStart(3, '0')} - {ticket.serviceType.toUpperCase()}
+                          </span>
+                          <span className="text-xs text-purple-600">
+                            Pos: {index + 1}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -304,23 +394,38 @@ export default function EmployeeManagement() {
                   Empleado Destino
                 </label>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {availableEmployees.map((employee) => (
-                    <button
-                      key={employee.id}
-                      onClick={() => handleDeriveTicket(selectedTicket, employee.id)}
-                      disabled={isLoading}
-                      className="w-full text-left p-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                    >
-                      <div className="font-semibold text-gray-800">{employee.name}</div>
-                      <div className="text-sm text-gray-600">{employee.position}</div>
-                    </button>
-                  ))}
+                  {state.employees.filter(e => e.isActive && e.id !== selectedTicket.servedBy).map((employee) => {
+                    const isAvailable = !employee.isPaused && !employee.currentTicketId;
+                    
+                    return (
+                      <button
+                        key={employee.id}
+                        onClick={() => handleDeriveTicket(selectedTicket, employee.id)}
+                        disabled={isLoading}
+                        className="w-full text-left p-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="font-semibold text-gray-800">{employee.name}</div>
+                            <div className="text-sm text-gray-600">{employee.position}</div>
+                          </div>
+                          <div className={`text-xs font-medium px-2 py-1 rounded-full ${
+                            isAvailable 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-orange-100 text-orange-800'
+                          }`}>
+                            {isAvailable ? 'Disponible' : 'Ocupado/Pausado'}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
                 
-                {availableEmployees.length === 0 && (
+                {state.employees.filter(e => e.isActive && e.id !== selectedTicket.servedBy).length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     <User size={48} className="mx-auto mb-2 opacity-50" />
-                    <p>No hay empleados disponibles</p>
+                    <p>No hay otros empleados disponibles</p>
                   </div>
                 )}
               </div>

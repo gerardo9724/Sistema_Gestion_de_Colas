@@ -4,7 +4,7 @@ export interface Ticket {
   number: number;
   serviceType: string;
   serviceSubtype?: string;
-  status: 'waiting' | 'being_served' | 'completed' | 'cancelled';
+  status: 'waiting' | 'being_served' | 'completed' | 'cancelled' | 'queued_for_employee'; // NEW: Added queued_for_employee status
   queuePosition: number;
   createdAt: Date;
   servedAt?: Date;
@@ -17,6 +17,13 @@ export interface Ticket {
   totalTime?: number;
   cancellationReason?: string;
   cancellationComment?: string;
+  
+  // NEW: Employee Queue Fields
+  queuedForEmployee?: string; // ID of employee this ticket is queued for
+  queuedAt?: Date; // When ticket was added to employee's personal queue
+  derivedFrom?: string; // ID of employee who derived this ticket
+  derivationReason?: string; // Reason for derivation
+  queuePositionForEmployee?: number; // Position in employee's personal queue
 }
 
 export interface ServiceCategory {
@@ -55,6 +62,11 @@ export interface Employee {
   isPaused: boolean;
   userId?: string;
   createdAt: Date;
+  
+  // NEW: Employee Queue Fields
+  personalQueueCount?: number; // Number of tickets in personal queue
+  maxPersonalQueueSize?: number; // Maximum tickets allowed in personal queue
+  autoProcessPersonalQueue?: boolean; // Auto-process personal queue when available
 }
 
 export interface User {
@@ -201,6 +213,25 @@ export interface PrintSettings {
   testMode: boolean;
 }
 
+// NEW: Employee Queue Management Types
+export interface EmployeeQueueInfo {
+  employeeId: string;
+  personalQueue: Ticket[];
+  isProcessingQueue: boolean;
+  nextTicketInQueue?: Ticket;
+  queueProcessingPaused: boolean;
+}
+
+export interface TicketDerivation {
+  id: string;
+  ticketId: string;
+  fromEmployeeId: string;
+  toEmployeeId: string;
+  derivedAt: Date;
+  reason?: string;
+  status: 'pending' | 'accepted' | 'completed';
+}
+
 export interface AppState {
   tickets: Ticket[];
   serviceCategories: ServiceCategory[];
@@ -226,4 +257,8 @@ export interface AppState {
     calledAt: Date;
   } | null;
   printSettings: PrintSettings;
+  
+  // NEW: Employee Queue Management State
+  employeeQueues: { [employeeId: string]: EmployeeQueueInfo };
+  ticketDerivations: TicketDerivation[];
 }
