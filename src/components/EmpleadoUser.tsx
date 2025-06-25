@@ -25,20 +25,8 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
 
-  // CRITICAL DEBUG: Log the current employee state
-  console.log('👤 EMPLEADO USER: Current employee state', {
-    currentEmployee: currentEmployee ? {
-      id: currentEmployee.id,
-      name: currentEmployee.name,
-      isPaused: currentEmployee.isPaused,
-      currentTicketId: currentEmployee.currentTicketId
-    } : null,
-    currentUser: currentUser ? {
-      id: currentUser.id,
-      name: currentUser.name,
-      type: currentUser.type
-    } : null
-  });
+  // CRITICAL FIX: Add initialization tracking to prevent multiple pause attempts
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Custom hooks for modular functionality
   const {
@@ -49,16 +37,9 @@ export default function EmpleadoUser() {
     handleCancelTicket,
     handleDeriveTicket,
     handleRecallTicket,
-    handleTogglePause, // CRITICAL: Get the function from the hook
+    handleTogglePause,
     isLoading
   } = useEmployeeTicketManagement(currentEmployee?.id || '');
-
-  // CRITICAL DEBUG: Verify the toggle pause function
-  console.log('🔧 EMPLEADO USER: Toggle pause function verification', {
-    handleTogglePauseType: typeof handleTogglePause,
-    handleTogglePauseExists: !!handleTogglePause,
-    isFunction: typeof handleTogglePause === 'function'
-  });
 
   const {
     elapsedTime,
@@ -68,24 +49,30 @@ export default function EmpleadoUser() {
 
   const queueStats = useEmployeeQueueStats(currentEmployee?.id || '');
 
-  // Auto-pause employee on login
+  // CRITICAL FIX: Auto-pause employee on login with initialization protection
   useEffect(() => {
     const initializeEmployeePauseState = async () => {
-      if (currentEmployee && !currentEmployee.isPaused && !currentEmployee.currentTicketId) {
+      if (!currentEmployee || isInitialized) return;
+      
+      if (!currentEmployee.isPaused && !currentEmployee.currentTicketId) {
         try {
           console.log('🔄 INITIAL PAUSE: Setting employee to paused state on login');
           await handleTogglePause();
+          setIsInitialized(true);
         } catch (error) {
           console.error('Error setting initial pause state:', error);
         }
+      } else {
+        // Already in correct state, just mark as initialized
+        setIsInitialized(true);
       }
     };
 
-    // Only run if we have the toggle function available
-    if (typeof handleTogglePause === 'function') {
+    // Only run if we have the toggle function available and not yet initialized
+    if (typeof handleTogglePause === 'function' && !isInitialized && currentEmployee) {
       initializeEmployeePauseState();
     }
-  }, [currentEmployee?.id, handleTogglePause]);
+  }, [currentEmployee, handleTogglePause, isInitialized]);
 
   const handleLogout = () => {
     dispatch({ type: 'LOGOUT' });
@@ -132,30 +119,6 @@ export default function EmpleadoUser() {
 
   const handleManualTicketRecalled = (ticket: any) => {
     console.log(`✅ Manual recall successful for ticket #${ticket.number}`);
-    // El estado se actualizará automáticamente a través de los listeners en tiempo real
-  };
-
-  // CRITICAL FIX: Enhanced toggle pause wrapper with comprehensive logging
-  const handleTogglePauseWrapper = async () => {
-    console.log('🔘 EMPLEADO USER: Toggle pause wrapper called');
-    
-    if (typeof handleTogglePause !== 'function') {
-      console.error('❌ CRITICAL ERROR: handleTogglePause is not a function in wrapper!', {
-        type: typeof handleTogglePause,
-        value: handleTogglePause
-      });
-      alert('Error crítico: Función de pausa no disponible');
-      return;
-    }
-
-    try {
-      console.log('🚀 EMPLEADO USER: Calling handleTogglePause...');
-      await handleTogglePause();
-      console.log('✅ EMPLEADO USER: handleTogglePause completed successfully');
-    } catch (error) {
-      console.error('❌ EMPLEADO USER: Error in toggle pause wrapper:', error);
-      alert('Error al cambiar estado de pausa');
-    }
   };
 
   const tabs = [
@@ -251,7 +214,7 @@ export default function EmpleadoUser() {
                 nextTicketType={queueStats.nextTicketType}
               />
 
-              {/* NEW: Manual Ticket Recall Component */}
+              {/* Manual Ticket Recall Component */}
               <ManualTicketRecall
                 currentEmployeeId={currentEmployee.id}
                 onTicketRecalled={handleManualTicketRecalled}
@@ -285,15 +248,15 @@ export default function EmpleadoUser() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
-      {/* CRITICAL FIX: Pass the wrapper function to EmployeeHeader */}
+      {/* Header */}
       <EmployeeHeader
         currentUser={currentUser}
         currentEmployee={currentEmployee}
         isConnected={state.isFirebaseConnected}
         isPaused={currentEmployee.isPaused}
-        hasCurrentTicket={!!currentTicket} // CRITICAL: Convert to boolean properly
+        hasCurrentTicket={!!currentTicket}
         onLogout={handleLogout}
-        onTogglePause={handleTogglePauseWrapper} // CRITICAL: Pass the wrapper function
+        onTogglePause={handleTogglePause}
       />
 
       <div className="max-w-7xl mx-auto px-6 py-8">

@@ -40,6 +40,10 @@ const convertFirestoreEmployee = (doc: any): Employee => {
   };
 };
 
+// CRITICAL FIX: Add request tracking to prevent database overflow
+const updateRequestTracker = new Map<string, number>();
+const UPDATE_DEBOUNCE_DELAY = 1000; // 1 second minimum between updates for same employee
+
 export const employeeService = {
   // Get all employees
   async getAllEmployees(): Promise<Employee[]> {
@@ -87,16 +91,37 @@ export const employeeService = {
     }
   },
 
-  // CRITICAL FIX: Enhanced update employee with comprehensive validation and error handling
+  // CRITICAL FIX: Enhanced update employee with debounce protection
   async updateEmployee(employeeId: string, updates: Partial<Employee>): Promise<void> {
     try {
+      // CRITICAL: Implement debounce to prevent database overflow
+      const now = Date.now();
+      const lastUpdateTime = updateRequestTracker.get(employeeId) || 0;
+      const timeSinceLastUpdate = now - lastUpdateTime;
+      
+      if (timeSinceLastUpdate < UPDATE_DEBOUNCE_DELAY) {
+        console.log(`⏱️ EMPLOYEE SERVICE: Update debounced for employee ${employeeId}`, {
+          timeSinceLastUpdate: `${timeSinceLastUpdate}ms`,
+          debounceDelay: `${UPDATE_DEBOUNCE_DELAY}ms`,
+          remainingTime: `${UPDATE_DEBOUNCE_DELAY - timeSinceLastUpdate}ms`
+        });
+        
+        // CRITICAL: For pause state changes, we must proceed despite debounce
+        // to ensure UI state matches database state
+        const isPauseStateChange = updates.isPaused !== undefined;
+        if (!isPauseStateChange) {
+          throw new Error(`Demasiadas solicitudes. Intente nuevamente en ${Math.ceil((UPDATE_DEBOUNCE_DELAY - timeSinceLastUpdate)/1000)} segundos.`);
+        }
+      }
+      
+      // Update the tracker immediately
+      updateRequestTracker.set(employeeId, now);
+      
       console.log('💾 EMPLOYEE SERVICE: Starting update operation', {
         employeeId,
-        updates,
         updateKeys: Object.keys(updates),
         criticalFields: {
           isPaused: updates.isPaused,
-          currentTicketId: updates.currentTicketId,
           isActive: updates.isActive
         }
       });
@@ -108,68 +133,73 @@ export const employeeService = {
       const employeeRef = doc(db, 'employees', employeeId);
       const updateData: any = { ...updates };
       
-      // CRITICAL: Validate required fields are present
-      const requiredFields = ['name', 'position', 'isActive'];
+      // Validate required fields
+      const requiredFields = ['name', 'position'];
       const missingFields = requiredFields.filter(field => 
-        updateData[field] === undefined && field !== 'isActive' // isActive can be false
+        updateData[field] === undefined
       );
       
       if (missingFields.length > 0) {
-        console.warn('⚠️ EMPLOYEE SERVICE: Missing required fields, but proceeding with partial update', {
+        console.warn('⚠️ EMPLOYEE SERVICE: Missing fields in update', {
           missingFields,
           providedFields: Object.keys(updateData)
         });
       }
 
-      // Convert undefined to null for Firestore compatibility
+      // Convert undefined to null for Firestore
       Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {
           updateData[key] = null;
         }
       });
       
-      // CRITICAL: Always update the updatedAt timestamp
+      // Always update the timestamp
       updateData.updatedAt = new Date();
       
       console.log('🚀 EMPLOYEE SERVICE: Sending update to Firebase', {
         employeeId,
-        finalUpdateData: updateData,
-        documentPath: `employees/${employeeId}`
+        finalUpdateData: updateData
       });
 
-      // CRITICAL FIX: Direct Firebase update with enhanced error handling
-      await updateDoc(employeeRef, updateData);
+      // CRITICAL: Add timeout protection for Firebase update
+      const updatePromise = updateDoc(employeeRef, updateData);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout: Database update took too long')), 10000);
+      });
+
+      await Promise.race([updatePromise, timeoutPromise]);
       
       console.log('✅ EMPLOYEE SERVICE: Firebase update completed successfully', {
         employeeId,
-        updatedFields: Object.keys(updateData),
-        timestamp: new Date().toISOString()
+        updatedFields: Object.keys(updateData)
       });
 
-      // VALIDATION: Log the critical state change if isPaused was updated
+      // Log critical state changes
       if (updates.isPaused !== undefined) {
         console.log(`🎯 EMPLOYEE SERVICE: PAUSE STATE UPDATED - Employee ${employeeId} isPaused: ${updates.isPaused}`);
       }
 
     } catch (error) {
-      console.error('❌ EMPLOYEE SERVICE: Critical update error', {
+      console.error('❌ EMPLOYEE SERVICE: Update error', {
         employeeId,
-        updates,
         error: error instanceof Error ? {
           message: error.message,
-          stack: error.stack,
           name: error.name
         } : error
       });
       
-      // ENHANCED ERROR: Provide more specific error information
+      // Provide specific error information
       if (error instanceof Error) {
-        if (error.message.includes('permission')) {
+        if (error.message.includes('Demasiadas solicitudes')) {
+          throw error; // Pass through debounce errors
+        } else if (error.message.includes('permission')) {
           throw new Error(`Permisos insuficientes para actualizar empleado: ${error.message}`);
         } else if (error.message.includes('not-found')) {
           throw new Error(`Empleado no encontrado: ${employeeId}`);
         } else if (error.message.includes('network')) {
           throw new Error(`Error de conexión: ${error.message}`);
+        } else if (error.message.includes('Timeout')) {
+          throw new Error(`Tiempo de espera agotado: ${error.message}`);
         } else {
           throw new Error(`Error al actualizar empleado: ${error.message}`);
         }
@@ -189,17 +219,23 @@ export const employeeService = {
     }
   },
 
-  // Subscribe to employee changes (real-time)
+  // CRITICAL FIX: Optimized subscription with controlled logging
   subscribeToEmployees(callback: (employees: Employee[]) => void): () => void {
     const q = query(collection(db, 'employees'), orderBy('createdAt', 'asc'));
+    
+    // Track last update time to prevent excessive logging
+    const lastLogTimeRef = { value: 0 };
+    const LOG_THROTTLE = 5000; // 5 seconds between logs
     
     return onSnapshot(q, (querySnapshot) => {
       const employees = querySnapshot.docs.map(convertFirestoreEmployee);
       
-      // CRITICAL DEBUG: Log real-time updates for pause state changes
-      employees.forEach(employee => {
-        console.log(`🔄 REAL-TIME UPDATE: Employee ${employee.name} - isPaused: ${employee.isPaused}, currentTicket: ${employee.currentTicketId || 'none'}`);
-      });
+      // Throttle logging to prevent console overflow
+      const now = Date.now();
+      if (now - lastLogTimeRef.value > LOG_THROTTLE) {
+        console.log(`🔄 EMPLOYEE SERVICE: Real-time update received with ${employees.length} employees`);
+        lastLogTimeRef.value = now;
+      }
       
       callback(employees);
     }, (error) => {

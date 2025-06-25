@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useCallback } from 'react';
 import { LogOut, Play, Pause, Clock, Wifi, WifiOff } from 'lucide-react';
 import type { User, Employee } from '../../types';
 
@@ -22,86 +22,84 @@ export default function EmployeeHeader({
   onTogglePause
 }: EmployeeHeaderProps) {
   
-  // CRITICAL DEBUG: Log the current state and function availability
-  console.log('🔍 EMPLOYEE HEADER DEBUG:', {
-    employeeName: currentEmployee.name,
-    employeeId: currentEmployee.id,
-    isPaused,
-    hasCurrentTicket,
-    currentTicketId: currentEmployee.currentTicketId,
-    onTogglePauseType: typeof onTogglePause,
-    onTogglePauseExists: !!onTogglePause,
-    buttonShouldBeDisabled: hasCurrentTicket,
-    buttonShouldWork: !hasCurrentTicket,
-    isConnected
-  });
+  // CRITICAL FIX: Add button click protection to prevent rapid successive clicks
+  const lastClickTimeRef = useRef<number>(0);
+  const isClickInProgressRef = useRef<boolean>(false);
 
-  // CRITICAL FIX: Enhanced click handler with comprehensive validation and error handling
-  const handleTogglePauseClick = async () => {
-    console.log('🔘 HEADER BUTTON CLICKED: Starting toggle pause process', {
-      action: isPaused ? 'RESUME' : 'PAUSE',
-      currentState: isPaused ? 'PAUSED' : 'ACTIVE',
-      hasCurrentTicket,
-      willExecute: !hasCurrentTicket,
-      functionAvailable: typeof onTogglePause === 'function',
-      employeeId: currentEmployee.id,
-      employeeName: currentEmployee.name
-    });
+  // CRITICAL FIX: Debounced click handler with comprehensive protection
+  const handleTogglePauseClick = useCallback(async () => {
+    console.log('🔘 HEADER BUTTON CLICKED: Starting protected toggle pause process');
 
-    // CRITICAL: Validate function exists before calling
+    // CRITICAL: Prevent rapid successive clicks
+    const now = Date.now();
+    const timeSinceLastClick = now - lastClickTimeRef.current;
+    const CLICK_DEBOUNCE_DELAY = 3000; // 3 seconds between clicks
+
+    if (timeSinceLastClick < CLICK_DEBOUNCE_DELAY) {
+      console.log(`🚫 CLICK DEBOUNCED: ${CLICK_DEBOUNCE_DELAY - timeSinceLastClick}ms remaining`);
+      return;
+    }
+
+    // CRITICAL: Prevent multiple simultaneous executions
+    if (isClickInProgressRef.current) {
+      console.log('🚫 CLICK BLOCKED: Already in progress');
+      return;
+    }
+
+    // CRITICAL: Validate function exists
     if (typeof onTogglePause !== 'function') {
-      console.error('❌ CRITICAL ERROR: onTogglePause is not a function!', {
-        type: typeof onTogglePause,
-        value: onTogglePause,
-        employeeId: currentEmployee.id
-      });
+      console.error('❌ CRITICAL ERROR: onTogglePause is not a function!');
       alert('Error crítico: Función de pausa no disponible');
       return;
     }
 
-    // CRITICAL: Check if action should be blocked
+    // CRITICAL: Check blocking conditions
     if (hasCurrentTicket) {
-      console.log('🚫 ACTION BLOCKED: Employee has current ticket', {
-        currentTicketId: currentEmployee.currentTicketId,
-        employeeId: currentEmployee.id
-      });
+      console.log('🚫 ACTION BLOCKED: Employee has current ticket');
       alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
       return;
     }
 
-    // CRITICAL: Check Firebase connection
     if (!isConnected) {
       console.log('🚫 ACTION BLOCKED: No Firebase connection');
       alert('Sin conexión a Firebase. Verifica tu conexión a internet.');
       return;
     }
 
+    // CRITICAL: Set protection flags
+    isClickInProgressRef.current = true;
+    lastClickTimeRef.current = now;
+
     try {
-      console.log('🚀 EXECUTING TOGGLE PAUSE: Calling function...');
+      console.log('🚀 EXECUTING PROTECTED TOGGLE PAUSE');
       
-      // CRITICAL FIX: Add loading state and timeout protection - increased timeout to 30 seconds
+      // CRITICAL: Add timeout protection for the function call
+      const togglePromise = onTogglePause();
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout: La operación tardó demasiado')), 30000);
+        setTimeout(() => reject(new Error('Timeout: La operación tardó demasiado')), 15000);
       });
 
-      await Promise.race([
-        onTogglePause(),
-        timeoutPromise
-      ]);
+      await Promise.race([togglePromise, timeoutPromise]);
       
       console.log('✅ TOGGLE PAUSE EXECUTED SUCCESSFULLY');
       
     } catch (error) {
       console.error('❌ TOGGLE PAUSE ERROR in header:', error);
       
-      let errorMessage = 'Error desconocido al cambiar estado de pausa';
+      let errorMessage = 'Error al cambiar estado de pausa';
       if (error instanceof Error) {
         errorMessage = error.message;
       }
       
-      alert(`Error al cambiar estado de pausa: ${errorMessage}`);
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      // CRITICAL: Reset click protection after delay
+      setTimeout(() => {
+        isClickInProgressRef.current = false;
+        console.log('🔓 HEADER: Click protection reset');
+      }, 2000);
     }
-  };
+  }, [onTogglePause, hasCurrentTicket, isConnected]);
 
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
@@ -141,12 +139,12 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* CRITICAL FIX: Resume/Pause Button with enhanced validation and visual feedback */}
+            {/* CRITICAL FIX: Protected Resume/Pause Button */}
             <button
               onClick={handleTogglePauseClick}
-              disabled={hasCurrentTicket || !isConnected} // CRITICAL: Also disable when no connection
+              disabled={hasCurrentTicket || !isConnected || isClickInProgressRef.current}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden ${
-                hasCurrentTicket || !isConnected
+                hasCurrentTicket || !isConnected || isClickInProgressRef.current
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
                   : isPaused 
                     ? 'bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl' 
@@ -154,14 +152,21 @@ export default function EmployeeHeader({
               }`}
               title={
                 !isConnected ? 'Sin conexión a Firebase' :
-                hasCurrentTicket ? 'No se puede pausar con ticket activo' : 
+                hasCurrentTicket ? 'No se puede pausar con ticket activo' :
+                isClickInProgressRef.current ? 'Procesando...' :
                 isPaused ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'
               }
             >
               {/* Visual feedback for button press */}
               <div className="absolute inset-0 bg-white opacity-0 group-active:opacity-20 transition-opacity duration-150"></div>
               
-              {isPaused ? (
+              {/* CRITICAL: Show loading state when processing */}
+              {isClickInProgressRef.current ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <span>Procesando...</span>
+                </>
+              ) : isPaused ? (
                 <>
                   <Play size={20} className={!hasCurrentTicket && isConnected ? "animate-pulse" : ""} />
                   <span>Reanudar</span>
