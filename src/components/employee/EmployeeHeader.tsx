@@ -21,6 +21,17 @@ export default function EmployeeHeader({
   onLogout,
   onTogglePause
 }: EmployeeHeaderProps) {
+  
+  // CRITICAL FIX: Log the current state for debugging
+  console.log('🔍 EMPLOYEE HEADER STATE:', {
+    employeeName: currentEmployee.name,
+    isPaused,
+    hasCurrentTicket,
+    currentTicketId: currentEmployee.currentTicketId,
+    buttonShouldBeDisabled: hasCurrentTicket,
+    buttonShouldWork: !hasCurrentTicket
+  });
+
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
       <div className="max-w-7xl mx-auto px-6 py-4">
@@ -59,10 +70,18 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* ENHANCED: Resume/Pause Button with Better Visual Feedback */}
+            {/* CRITICAL FIX: Resume/Pause Button - ONLY disable when has current ticket */}
             <button
-              onClick={onTogglePause}
-              disabled={hasCurrentTicket}
+              onClick={() => {
+                console.log('🔘 BUTTON CLICKED:', {
+                  action: isPaused ? 'RESUME' : 'PAUSE',
+                  currentState: isPaused ? 'PAUSED' : 'ACTIVE',
+                  hasCurrentTicket,
+                  willExecute: !hasCurrentTicket
+                });
+                onTogglePause();
+              }}
+              disabled={hasCurrentTicket} // CRITICAL: ONLY disable when has current ticket
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform ${
                 hasCurrentTicket 
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'

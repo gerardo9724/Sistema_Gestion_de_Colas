@@ -138,6 +138,7 @@ export default function EmpleadoUser() {
     );
   }
 
+  // CRITICAL FIX: Pass correct props to EmployeeHeader
   const renderContent = () => {
     switch (activeTab) {
       case 'queue':
@@ -236,13 +237,13 @@ export default function EmpleadoUser() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
-      {/* Header */}
+      {/* CRITICAL FIX: Pass hasCurrentTicket correctly */}
       <EmployeeHeader
         currentUser={currentUser}
         currentEmployee={currentEmployee}
         isConnected={state.isFirebaseConnected}
         isPaused={currentEmployee.isPaused}
-        hasCurrentTicket={!!currentTicket}
+        hasCurrentTicket={!!currentTicket} // CRITICAL: Convert to boolean properly
         onLogout={handleLogout}
         onTogglePause={handleTogglePause}
       />
