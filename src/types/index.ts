@@ -17,7 +17,7 @@ export interface Ticket {
   totalTime?: number;
   cancellationReason?: string;
   cancellationComment?: string;
-  // NEW: Derivation workflow fields
+  // UPDATED: Enhanced derivation workflow fields
   derivedFrom?: string; // ID of employee who derived this ticket
   derivedTo?: string; // ID of employee this ticket was derived to
   derivedAt?: Date; // When the ticket was derived
@@ -63,7 +63,7 @@ export interface Employee {
   isPaused: boolean;
   userId?: string;
   createdAt: Date;
-  // NEW: Personal queue management
+  // Enhanced personal queue management
   personalQueueCount?: number; // Number of tickets in personal queue
   maxPersonalQueueSize?: number; // Maximum tickets allowed in personal queue
   autoAcceptDerivations?: boolean; // Auto-accept derived tickets
@@ -213,7 +213,7 @@ export interface PrintSettings {
   testMode: boolean;
 }
 
-// NEW: Ticket Derivation Interface
+// ENHANCED: Ticket Derivation Interface with better tracking
 export interface TicketDerivation {
   id: string;
   ticketId: string;
@@ -240,7 +240,7 @@ export interface AppState {
   carouselImages: CarouselImage[];
   ticketTemplates: TicketTemplate[];
   cancellationReasons: CancellationReason[];
-  ticketDerivations: TicketDerivation[]; // NEW: Track derivations
+  ticketDerivations: TicketDerivation[]; // Track derivations
   currentUser: User | null;
   currentEmployee: Employee | null;
   currentComputerProfile: ComputerProfile | null;
