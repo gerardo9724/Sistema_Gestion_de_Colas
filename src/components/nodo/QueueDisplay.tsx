@@ -117,7 +117,7 @@ export default function QueueDisplay({
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
             <h3 className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold text-center`} style={{ color: textColor }}>
-              Tickets en Atención ({ticketsToDisplay.filter(t => t.status === 'being_served').length}) + Completados ({ticketsToDisplay.filter(t => t.status === 'completed').length})
+              Tickets en Atención
             </h3>
           </div>
           
