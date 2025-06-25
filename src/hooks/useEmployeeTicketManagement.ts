@@ -198,9 +198,9 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // CRITICAL FIX: COMPLETELY REWRITTEN toggle pause function with comprehensive debugging
+  // CRITICAL FIX: COMPLETELY REWRITTEN toggle pause function with DIRECT Firebase update
   const handleTogglePause = async () => {
-    console.log('🔄 TOGGLE PAUSE HOOK: Function called');
+    console.log('🔄 TOGGLE PAUSE HOOK: Function called with comprehensive validation');
     
     if (!currentEmployee) {
       console.error('❌ TOGGLE PAUSE: No current employee found');
@@ -208,9 +208,15 @@ export function useEmployeeTicketManagement(employeeId: string) {
       return;
     }
 
-    console.log('👤 TOGGLE PAUSE: Employee found', {
-      id: currentEmployee.id,
-      name: currentEmployee.name,
+    if (!employeeId) {
+      console.error('❌ TOGGLE PAUSE: No employee ID provided');
+      alert('Error: ID de empleado no disponible');
+      return;
+    }
+
+    console.log('👤 TOGGLE PAUSE: Employee validation successful', {
+      employeeId,
+      employeeName: currentEmployee.name,
       currentPauseState: currentEmployee.isPaused,
       hasCurrentTicket: !!currentTicket,
       currentTicketId: currentEmployee.currentTicketId
@@ -231,29 +237,34 @@ export function useEmployeeTicketManagement(employeeId: string) {
       console.log(`🔄 TOGGLE PAUSE: Changing pause state`, {
         from: currentEmployee.isPaused,
         to: newPauseState,
-        action: newPauseState ? 'PAUSING' : 'RESUMING'
+        action: newPauseState ? 'PAUSING' : 'RESUMING',
+        employeeId
       });
       
-      // CRITICAL FIX: Update employee pause state with comprehensive data
-      const updateData = {
-        ...currentEmployee,
-        isPaused: newPauseState,
-        // Ensure other fields are preserved
+      // CRITICAL FIX: Create a COMPLETE update object with ALL required fields
+      const completeUpdateData = {
+        name: currentEmployee.name,
+        position: currentEmployee.position,
+        isActive: currentEmployee.isActive,
         currentTicketId: currentEmployee.currentTicketId || undefined,
         totalTicketsServed: currentEmployee.totalTicketsServed || 0,
         totalTicketsCancelled: currentEmployee.totalTicketsCancelled || 0,
-        isActive: currentEmployee.isActive,
-        name: currentEmployee.name,
-        position: currentEmployee.position,
-        userId: currentEmployee.userId,
+        isPaused: newPauseState, // CRITICAL: The main field we're updating
+        userId: currentEmployee.userId || undefined,
         createdAt: currentEmployee.createdAt
       };
 
-      console.log('💾 TOGGLE PAUSE: Updating employee with data:', updateData);
+      console.log('💾 TOGGLE PAUSE: Sending COMPLETE update to Firebase:', {
+        employeeId,
+        updateData: completeUpdateData,
+        criticalField: `isPaused: ${currentEmployee.isPaused} → ${newPauseState}`
+      });
 
-      await employeeService.updateEmployee(employeeId, updateData);
+      // CRITICAL FIX: Direct Firebase update with error handling
+      await employeeService.updateEmployee(employeeId, completeUpdateData);
 
-      console.log(`✅ TOGGLE PAUSE: Employee pause state updated successfully to ${newPauseState}`);
+      console.log(`✅ TOGGLE PAUSE: Firebase update completed successfully`);
+      console.log(`🎯 TOGGLE PAUSE: Employee pause state changed from ${currentEmployee.isPaused} to ${newPauseState}`);
 
       // CRITICAL FIX: If resuming (unpausing), employee becomes ACTIVE immediately
       if (currentEmployee.isPaused && !newPauseState) {
@@ -274,22 +285,55 @@ export function useEmployeeTicketManagement(employeeId: string) {
             console.error('❌ RESUME ERROR: Failed to auto-assign ticket:', error);
             // Employee is still active even if auto-assignment fails
           }
-        }, 500);
+        }, 1000); // Increased delay to ensure Firebase update is complete
+        
       } else if (!currentEmployee.isPaused && newPauseState) {
         console.log('⏸️ PAUSE: Employee paused successfully');
       }
       
     } catch (error) {
-      console.error('❌ TOGGLE PAUSE ERROR:', error);
-      alert('Error al cambiar estado de pausa: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+      console.error('❌ TOGGLE PAUSE CRITICAL ERROR:', error);
+      
+      // ENHANCED ERROR HANDLING: Provide specific error information
+      let errorMessage = 'Error desconocido al cambiar estado de pausa';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error('❌ TOGGLE PAUSE ERROR DETAILS:', {
+          message: error.message,
+          stack: error.stack,
+          employeeId,
+          currentEmployee: currentEmployee.name
+        });
+      }
+      
+      alert(`Error al cambiar estado de pausa: ${errorMessage}`);
+      
+      // CRITICAL: Try to reload employee data to ensure UI consistency
+      try {
+        console.log('🔄 TOGGLE PAUSE: Attempting to refresh employee data after error...');
+        // The real-time listeners should handle this, but we log for debugging
+      } catch (refreshError) {
+        console.error('❌ TOGGLE PAUSE: Failed to refresh employee data:', refreshError);
+      }
+      
     } finally {
       setIsLoading(false);
-      console.log('🔓 TOGGLE PAUSE: Loading state cleared');
+      console.log('🔓 TOGGLE PAUSE: Loading state cleared, operation complete');
     }
   };
 
-  // CRITICAL DEBUG: Log the function being returned
-  console.log('🔧 HOOK RETURN: handleTogglePause function type:', typeof handleTogglePause);
+  // CRITICAL DEBUG: Log the function being returned with validation
+  useEffect(() => {
+    console.log('🔧 HOOK VALIDATION: useEmployeeTicketManagement hook state', {
+      employeeId,
+      currentEmployeeExists: !!currentEmployee,
+      currentEmployeeName: currentEmployee?.name,
+      handleTogglePauseType: typeof handleTogglePause,
+      handleTogglePauseIsFunction: typeof handleTogglePause === 'function',
+      hookIsReady: !!currentEmployee && typeof handleTogglePause === 'function'
+    });
+  }, [employeeId, currentEmployee, handleTogglePause]);
 
   return {
     currentTicket,

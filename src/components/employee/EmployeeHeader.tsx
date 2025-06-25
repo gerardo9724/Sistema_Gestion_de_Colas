@@ -25,49 +25,81 @@ export default function EmployeeHeader({
   // CRITICAL DEBUG: Log the current state and function availability
   console.log('🔍 EMPLOYEE HEADER DEBUG:', {
     employeeName: currentEmployee.name,
+    employeeId: currentEmployee.id,
     isPaused,
     hasCurrentTicket,
     currentTicketId: currentEmployee.currentTicketId,
     onTogglePauseType: typeof onTogglePause,
     onTogglePauseExists: !!onTogglePause,
     buttonShouldBeDisabled: hasCurrentTicket,
-    buttonShouldWork: !hasCurrentTicket
+    buttonShouldWork: !hasCurrentTicket,
+    isConnected
   });
 
-  // CRITICAL FIX: Enhanced click handler with comprehensive logging
+  // CRITICAL FIX: Enhanced click handler with comprehensive validation and error handling
   const handleTogglePauseClick = async () => {
-    console.log('🔘 HEADER BUTTON CLICKED:', {
+    console.log('🔘 HEADER BUTTON CLICKED: Starting toggle pause process', {
       action: isPaused ? 'RESUME' : 'PAUSE',
       currentState: isPaused ? 'PAUSED' : 'ACTIVE',
       hasCurrentTicket,
       willExecute: !hasCurrentTicket,
-      functionAvailable: typeof onTogglePause === 'function'
+      functionAvailable: typeof onTogglePause === 'function',
+      employeeId: currentEmployee.id,
+      employeeName: currentEmployee.name
     });
 
     // CRITICAL: Validate function exists before calling
     if (typeof onTogglePause !== 'function') {
       console.error('❌ CRITICAL ERROR: onTogglePause is not a function!', {
         type: typeof onTogglePause,
-        value: onTogglePause
+        value: onTogglePause,
+        employeeId: currentEmployee.id
       });
-      alert('Error: Función de pausa no disponible');
+      alert('Error crítico: Función de pausa no disponible');
       return;
     }
 
     // CRITICAL: Check if action should be blocked
     if (hasCurrentTicket) {
-      console.log('🚫 ACTION BLOCKED: Employee has current ticket');
+      console.log('🚫 ACTION BLOCKED: Employee has current ticket', {
+        currentTicketId: currentEmployee.currentTicketId,
+        employeeId: currentEmployee.id
+      });
       alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
       return;
     }
 
+    // CRITICAL: Check Firebase connection
+    if (!isConnected) {
+      console.log('🚫 ACTION BLOCKED: No Firebase connection');
+      alert('Sin conexión a Firebase. Verifica tu conexión a internet.');
+      return;
+    }
+
     try {
-      console.log('🚀 EXECUTING TOGGLE PAUSE...');
-      await onTogglePause();
+      console.log('🚀 EXECUTING TOGGLE PAUSE: Calling function...');
+      
+      // CRITICAL FIX: Add loading state and timeout protection
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout: La operación tardó demasiado')), 10000);
+      });
+
+      await Promise.race([
+        onTogglePause(),
+        timeoutPromise
+      ]);
+      
       console.log('✅ TOGGLE PAUSE EXECUTED SUCCESSFULLY');
+      
     } catch (error) {
-      console.error('❌ TOGGLE PAUSE ERROR:', error);
-      alert('Error al cambiar estado de pausa');
+      console.error('❌ TOGGLE PAUSE ERROR in header:', error);
+      
+      let errorMessage = 'Error desconocido al cambiar estado de pausa';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      alert(`Error al cambiar estado de pausa: ${errorMessage}`);
     }
   };
 
@@ -109,23 +141,29 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* CRITICAL FIX: Resume/Pause Button with enhanced click handler */}
+            {/* CRITICAL FIX: Resume/Pause Button with enhanced validation and visual feedback */}
             <button
               onClick={handleTogglePauseClick}
-              disabled={hasCurrentTicket} // CRITICAL: ONLY disable when has current ticket
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform ${
-                hasCurrentTicket 
+              disabled={hasCurrentTicket || !isConnected} // CRITICAL: Also disable when no connection
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden ${
+                hasCurrentTicket || !isConnected
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
                   : isPaused 
                     ? 'bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl' 
                     : 'bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
               }`}
-              title={hasCurrentTicket ? 'No se puede pausar con ticket activo' : 
-                     isPaused ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'}
+              title={
+                !isConnected ? 'Sin conexión a Firebase' :
+                hasCurrentTicket ? 'No se puede pausar con ticket activo' : 
+                isPaused ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'
+              }
             >
+              {/* Visual feedback for button press */}
+              <div className="absolute inset-0 bg-white opacity-0 group-active:opacity-20 transition-opacity duration-150"></div>
+              
               {isPaused ? (
                 <>
-                  <Play size={20} className="animate-pulse" />
+                  <Play size={20} className={!hasCurrentTicket && isConnected ? "animate-pulse" : ""} />
                   <span>Reanudar</span>
                 </>
               ) : (
@@ -133,6 +171,11 @@ export default function EmployeeHeader({
                   <Pause size={20} />
                   <span>Pausar</span>
                 </>
+              )}
+              
+              {/* Connection indicator */}
+              {!isConnected && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
               )}
             </button>
             

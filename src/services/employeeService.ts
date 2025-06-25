@@ -87,25 +87,95 @@ export const employeeService = {
     }
   },
 
-  // Update employee
+  // CRITICAL FIX: Enhanced update employee with comprehensive validation and error handling
   async updateEmployee(employeeId: string, updates: Partial<Employee>): Promise<void> {
     try {
+      console.log('💾 EMPLOYEE SERVICE: Starting update operation', {
+        employeeId,
+        updates,
+        updateKeys: Object.keys(updates),
+        criticalFields: {
+          isPaused: updates.isPaused,
+          currentTicketId: updates.currentTicketId,
+          isActive: updates.isActive
+        }
+      });
+
+      if (!employeeId) {
+        throw new Error('Employee ID is required for update');
+      }
+
       const employeeRef = doc(db, 'employees', employeeId);
       const updateData: any = { ...updates };
       
-      // Convert undefined to null for Firestore
+      // CRITICAL: Validate required fields are present
+      const requiredFields = ['name', 'position', 'isActive'];
+      const missingFields = requiredFields.filter(field => 
+        updateData[field] === undefined && field !== 'isActive' // isActive can be false
+      );
+      
+      if (missingFields.length > 0) {
+        console.warn('⚠️ EMPLOYEE SERVICE: Missing required fields, but proceeding with partial update', {
+          missingFields,
+          providedFields: Object.keys(updateData)
+        });
+      }
+
+      // Convert undefined to null for Firestore compatibility
       Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {
           updateData[key] = null;
         }
       });
       
+      // CRITICAL: Always update the updatedAt timestamp
       updateData.updatedAt = new Date();
       
+      console.log('🚀 EMPLOYEE SERVICE: Sending update to Firebase', {
+        employeeId,
+        finalUpdateData: updateData,
+        documentPath: `employees/${employeeId}`
+      });
+
+      // CRITICAL FIX: Direct Firebase update with enhanced error handling
       await updateDoc(employeeRef, updateData);
+      
+      console.log('✅ EMPLOYEE SERVICE: Firebase update completed successfully', {
+        employeeId,
+        updatedFields: Object.keys(updateData),
+        timestamp: new Date().toISOString()
+      });
+
+      // VALIDATION: Log the critical state change if isPaused was updated
+      if (updates.isPaused !== undefined) {
+        console.log(`🎯 EMPLOYEE SERVICE: PAUSE STATE UPDATED - Employee ${employeeId} isPaused: ${updates.isPaused}`);
+      }
+
     } catch (error) {
-      console.error('Error updating employee:', error);
-      throw new Error('Failed to update employee');
+      console.error('❌ EMPLOYEE SERVICE: Critical update error', {
+        employeeId,
+        updates,
+        error: error instanceof Error ? {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        } : error
+      });
+      
+      // ENHANCED ERROR: Provide more specific error information
+      if (error instanceof Error) {
+        if (error.message.includes('permission')) {
+          throw new Error(`Permisos insuficientes para actualizar empleado: ${error.message}`);
+        } else if (error.message.includes('not-found')) {
+          throw new Error(`Empleado no encontrado: ${employeeId}`);
+        } else if (error.message.includes('network')) {
+          throw new Error(`Error de conexión: ${error.message}`);
+        } else {
+          throw new Error(`Error al actualizar empleado: ${error.message}`);
+        }
+      } else {
+        throw new Error('Error desconocido al actualizar empleado');
+      }
     }
   },
 
@@ -125,9 +195,15 @@ export const employeeService = {
     
     return onSnapshot(q, (querySnapshot) => {
       const employees = querySnapshot.docs.map(convertFirestoreEmployee);
+      
+      // CRITICAL DEBUG: Log real-time updates for pause state changes
+      employees.forEach(employee => {
+        console.log(`🔄 REAL-TIME UPDATE: Employee ${employee.name} - isPaused: ${employee.isPaused}, currentTicket: ${employee.currentTicketId || 'none'}`);
+      });
+      
       callback(employees);
     }, (error) => {
-      console.error('Error in employees subscription:', error);
+      console.error('❌ EMPLOYEE SERVICE: Real-time subscription error:', error);
     });
   }
 };
