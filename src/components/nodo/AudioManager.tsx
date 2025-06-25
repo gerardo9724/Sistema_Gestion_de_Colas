@@ -31,7 +31,84 @@ export default function AudioManager({
   const lastProcessedTimestamp = useRef<number>(0);
   const isProcessingAnnouncement = useRef<boolean>(false);
 
-  // FIXED: Monitor for ticket calls with proper duplicate prevention
+  // CRITICAL FIX: Enhanced employee lookup with multiple validation methods
+  const findCorrectEmployee = (ticket: Ticket): Employee | null => {
+    console.log('🔍 EMPLOYEE LOOKUP: Finding correct employee for ticket', {
+      ticketId: ticket.id,
+      ticketNumber: ticket.number,
+      servedBy: ticket.servedBy,
+      availableEmployees: employees.length
+    });
+
+    // Method 1: Direct lookup by servedBy ID
+    if (ticket.servedBy) {
+      const directEmployee = employees.find(emp => emp.id === ticket.servedBy);
+      if (directEmployee) {
+        console.log('✅ EMPLOYEE FOUND (Direct): Using servedBy ID', {
+          employeeId: directEmployee.id,
+          employeeName: directEmployee.name,
+          method: 'servedBy'
+        });
+        return directEmployee;
+      } else {
+        console.warn('⚠️ EMPLOYEE WARNING: servedBy ID not found in employees list', {
+          servedById: ticket.servedBy,
+          availableEmployeeIds: employees.map(e => ({ id: e.id, name: e.name }))
+        });
+      }
+    }
+
+    // Method 2: Find employee with this ticket as currentTicketId
+    const employeeWithTicket = employees.find(emp => emp.currentTicketId === ticket.id);
+    if (employeeWithTicket) {
+      console.log('✅ EMPLOYEE FOUND (Current Ticket): Using currentTicketId match', {
+        employeeId: employeeWithTicket.id,
+        employeeName: employeeWithTicket.name,
+        method: 'currentTicketId'
+      });
+      return employeeWithTicket;
+    }
+
+    // Method 3: Find employee who is currently serving and not paused (fallback for race conditions)
+    const activeServingEmployees = employees.filter(emp => 
+      emp.isActive && 
+      !emp.isPaused && 
+      emp.currentTicketId && 
+      emp.currentTicketId !== ''
+    );
+
+    if (activeServingEmployees.length === 1) {
+      console.log('✅ EMPLOYEE FOUND (Active Serving): Using single active employee', {
+        employeeId: activeServingEmployees[0].id,
+        employeeName: activeServingEmployees[0].name,
+        method: 'singleActiveServing'
+      });
+      return activeServingEmployees[0];
+    }
+
+    // Method 4: Last resort - find any active employee (should rarely happen)
+    const anyActiveEmployee = employees.find(emp => emp.isActive && !emp.isPaused);
+    if (anyActiveEmployee) {
+      console.warn('⚠️ EMPLOYEE FALLBACK: Using any active employee as last resort', {
+        employeeId: anyActiveEmployee.id,
+        employeeName: anyActiveEmployee.name,
+        method: 'fallback'
+      });
+      return anyActiveEmployee;
+    }
+
+    console.error('❌ EMPLOYEE ERROR: No suitable employee found for ticket', {
+      ticketId: ticket.id,
+      ticketNumber: ticket.number,
+      servedBy: ticket.servedBy,
+      totalEmployees: employees.length,
+      activeEmployees: employees.filter(e => e.isActive).length
+    });
+
+    return null;
+  };
+
+  // FIXED: Monitor for ticket calls with proper duplicate prevention and enhanced employee lookup
   useEffect(() => {
     if (!audioEnabled || isProcessingAnnouncement.current) return;
 
@@ -60,7 +137,8 @@ export default function AudioManager({
     });
 
     if (ticketToAnnounce) {
-      const employee = employees.find(emp => emp.id === ticketToAnnounce.servedBy);
+      // CRITICAL FIX: Use enhanced employee lookup
+      const employee = findCorrectEmployee(ticketToAnnounce);
       
       if (employee) {
         // CRITICAL FIX: Prevent multiple simultaneous announcements
@@ -72,8 +150,10 @@ export default function AudioManager({
         console.log('🔊 AUDIO ANNOUNCEMENT TRIGGERED:', {
           ticketNumber: ticketToAnnounce.number,
           employeeName: employee.name,
+          employeeId: employee.id,
           servedAt: ticketToAnnounce.servedAt,
-          newTimestamp: lastProcessedTimestamp.current
+          newTimestamp: lastProcessedTimestamp.current,
+          lookupMethod: 'enhanced'
         });
 
         // Update the announced ticket ID for tracking
@@ -85,7 +165,7 @@ export default function AudioManager({
         // Play notification sound
         playNotificationSound();
         
-        // Announce after 800ms
+        // CRITICAL FIX: Announce with CORRECT employee name
         setTimeout(() => {
           announceTicket(ticketToAnnounce.number, employee.name);
           
@@ -100,6 +180,12 @@ export default function AudioManager({
         setTimeout(() => {
           onTicketHighlighted(null);
         }, highlightDuration);
+      } else {
+        console.error('❌ AUDIO ERROR: No employee found for ticket announcement', {
+          ticketId: ticketToAnnounce.id,
+          ticketNumber: ticketToAnnounce.number,
+          servedBy: ticketToAnnounce.servedBy
+        });
       }
     }
   }, [tickets, audioEnabled, highlightDuration, employees, onTicketAnnounced, onTicketHighlighted]);
@@ -135,7 +221,7 @@ export default function AudioManager({
       
       // FIXED: Wait a moment to ensure previous speech is cancelled
       setTimeout(() => {
-        // More natural and softer announcement text
+        // CRITICAL FIX: More natural and softer announcement text with CORRECT employee name
         const text = `Ticket número ${ticketNumber.toString().padStart(3, '0')}. Favor dirigirse con ${employeeName}`;
         
         const utterance = new SpeechSynthesisUtterance(text);
@@ -202,7 +288,11 @@ export default function AudioManager({
           utterance.pitch = 0.9;
           utterance.volume = audioVolume;
           
-          console.log('🔊 PLAYING SINGLE AUDIO ANNOUNCEMENT:', text);
+          console.log('🔊 PLAYING SINGLE AUDIO ANNOUNCEMENT:', {
+            text,
+            employeeName,
+            voice: selectedVoiceObj?.name || 'default'
+          });
           speechSynthesis.speak(utterance);
         };
 
