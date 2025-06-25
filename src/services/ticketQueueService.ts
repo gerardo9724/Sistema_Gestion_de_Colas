@@ -269,18 +269,12 @@ export const ticketQueueService = {
     }
   },
 
-  // FIXED: Auto-assign next ticket with proper validation
+  // ENHANCED: Auto-assign next ticket with improved validation and logging
   async autoAssignNextTicket(employeeId: string): Promise<Ticket | null> {
     try {
       console.log('🤖 AUTO-ASSIGN: Starting auto-assignment for employee', employeeId);
 
-      const nextTicket = await this.getNextTicketForEmployee(employeeId);
-      
-      if (!nextTicket) {
-        console.log('📭 AUTO-ASSIGN: No tickets available for assignment');
-        return null;
-      }
-
+      // Get fresh employee data to ensure we have the latest state
       const allEmployees = await employeeService.getAllEmployees();
       const employee = allEmployees.find(e => e.id === employeeId);
 
@@ -289,6 +283,7 @@ export const ticketQueueService = {
         return null;
       }
 
+      // CRITICAL: Check all conditions before proceeding
       if (employee.isPaused) {
         console.log('⏸️ AUTO-ASSIGN: Employee is paused, skipping auto-assignment');
         return null;
@@ -299,10 +294,19 @@ export const ticketQueueService = {
         return null;
       }
 
+      // Get next available ticket
+      const nextTicket = await this.getNextTicketForEmployee(employeeId);
+      
+      if (!nextTicket) {
+        console.log('📭 AUTO-ASSIGN: No tickets available for assignment');
+        return null;
+      }
+
       console.log('🎯 AUTO-ASSIGN: Assigning ticket to employee', {
         ticketId: nextTicket.id,
         ticketNumber: nextTicket.number,
-        employeeName: employee.name
+        employeeName: employee.name,
+        ticketType: nextTicket.queueType || 'general'
       });
 
       // Calculate wait time
@@ -323,7 +327,7 @@ export const ticketQueueService = {
       await employeeService.updateEmployee(employeeId, {
         ...employee,
         currentTicketId: nextTicket.id,
-        isPaused: false
+        isPaused: false // CRITICAL: Ensure employee is not paused when serving
       });
 
       console.log('✅ AUTO-ASSIGN: Ticket assigned successfully');

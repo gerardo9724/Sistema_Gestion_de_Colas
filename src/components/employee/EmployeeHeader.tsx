@@ -59,24 +59,36 @@ export default function EmployeeHeader({
               </div>
             </div>
             
+            {/* ENHANCED: Resume/Pause Button with Better Visual Feedback */}
             <button
               onClick={onTogglePause}
               disabled={hasCurrentTicket}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors font-semibold ${
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform ${
                 hasCurrentTicket 
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
                   : isPaused 
-                    ? 'bg-green-500 hover:bg-green-600 text-white' 
-                    : 'bg-orange-500 hover:bg-orange-600 text-white'
+                    ? 'bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl' 
+                    : 'bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
               }`}
+              title={hasCurrentTicket ? 'No se puede pausar con ticket activo' : 
+                     isPaused ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'}
             >
-              {isPaused ? <Play size={20} /> : <Pause size={20} />}
-              <span>{isPaused ? 'Reanudar' : 'Pausar'}</span>
+              {isPaused ? (
+                <>
+                  <Play size={20} className="animate-pulse" />
+                  <span>Reanudar</span>
+                </>
+              ) : (
+                <>
+                  <Pause size={20} />
+                  <span>Pausar</span>
+                </>
+              )}
             </button>
             
             <button
               onClick={onLogout}
-              className="flex items-center space-x-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
+              className="flex items-center space-x-2 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white px-4 py-2 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
             >
               <LogOut size={20} />
               <span>Cerrar Sesión</span>

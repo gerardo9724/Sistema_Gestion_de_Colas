@@ -170,6 +170,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
+  // FIXED: Enhanced toggle pause with auto-assignment logic
   const handleTogglePause = async () => {
     if (!currentEmployee) return;
 
@@ -180,10 +181,35 @@ export function useEmployeeTicketManagement(employeeId: string) {
     
     setIsLoading(true);
     try {
+      const newPauseState = !currentEmployee.isPaused;
+      
+      console.log(`🔄 TOGGLE PAUSE: Employee ${currentEmployee.name} changing pause state from ${currentEmployee.isPaused} to ${newPauseState}`);
+      
+      // Update employee pause state
       await employeeService.updateEmployee(employeeId, {
         ...currentEmployee,
-        isPaused: !currentEmployee.isPaused
+        isPaused: newPauseState
       });
+
+      // CRITICAL FIX: If resuming (unpausing), try to auto-assign next ticket
+      if (currentEmployee.isPaused && !newPauseState) {
+        console.log('🎯 RESUME: Employee resuming, checking for available tickets...');
+        
+        // Wait a moment for the employee state to update, then try auto-assignment
+        setTimeout(async () => {
+          try {
+            const assignedTicket = await autoAssignNextTicket(employeeId);
+            if (assignedTicket) {
+              console.log(`✅ RESUME: Auto-assigned ticket ${assignedTicket.number} to ${currentEmployee.name}`);
+            } else {
+              console.log('📭 RESUME: No tickets available for auto-assignment');
+            }
+          } catch (error) {
+            console.error('❌ RESUME ERROR: Failed to auto-assign ticket:', error);
+          }
+        }, 500);
+      }
+      
     } catch (error) {
       console.error('Error toggling pause:', error);
       alert('Error al cambiar estado de pausa');
@@ -199,7 +225,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     handleCompleteTicket,
     handleCancelTicket,
     handleDeriveTicket,
-    handleRecallTicket, // NEW: Export recall function
+    handleRecallTicket,
     handleTogglePause,
     isLoading
   };
