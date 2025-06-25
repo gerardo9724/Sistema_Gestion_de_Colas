@@ -191,6 +191,71 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.isFirebaseConnected]);
 
+  // CRITICAL NEW: Global cleanup handler for unexpected app closure
+  useEffect(() => {
+    const setupGlobalCleanup = () => {
+      console.log('🛡️ GLOBAL CLEANUP: Setting up app-level cleanup handlers');
+
+      // CRITICAL: Handle app-level cleanup on page unload
+      const handleAppUnload = async () => {
+        console.log('🚪 APP UNLOAD: Application is closing, checking for active employees');
+
+        // Find all active employees and deactivate them (unless they have current tickets)
+        const activeEmployees = state.employees.filter(emp => 
+          emp.isActive && !emp.currentTicketId
+        );
+
+        if (activeEmployees.length > 0) {
+          console.log(`⏸️ APP UNLOAD: Deactivating ${activeEmployees.length} employees without current tickets`);
+
+          // Use Promise.allSettled to handle multiple employee updates
+          const deactivationPromises = activeEmployees.map(async (employee) => {
+            try {
+              await employeeService.updateEmployee(employee.id, {
+                isActive: false,
+                isPaused: true
+              });
+              console.log(`✅ APP UNLOAD: Deactivated employee ${employee.name}`);
+            } catch (error) {
+              console.error(`❌ APP UNLOAD: Failed to deactivate employee ${employee.name}:`, error);
+            }
+          });
+
+          await Promise.allSettled(deactivationPromises);
+        }
+
+        const employeesWithTickets = state.employees.filter(emp => 
+          emp.isActive && emp.currentTicketId
+        );
+
+        if (employeesWithTickets.length > 0) {
+          console.log(`🎫 APP UNLOAD: Keeping ${employeesWithTickets.length} employees active (have current tickets)`, 
+            employeesWithTickets.map(e => ({ name: e.name, ticketId: e.currentTicketId }))
+          );
+        }
+      };
+
+      // CRITICAL: Register global unload handler
+      const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+        // Only run cleanup if we have Firebase connection and employees
+        if (state.isFirebaseConnected && state.employees.length > 0) {
+          handleAppUnload();
+        }
+      };
+
+      window.addEventListener('beforeunload', handleBeforeUnload);
+
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      };
+    };
+
+    // Only setup global cleanup if we have employees and Firebase connection
+    if (state.isFirebaseConnected && state.employees.length > 0) {
+      return setupGlobalCleanup();
+    }
+  }, [state.isFirebaseConnected, state.employees]);
+
   // Set up real-time listeners when connected
   useEffect(() => {
     if (!state.isFirebaseConnected) return;

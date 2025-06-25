@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../contexts/AppContext';
 import EmployeeHeader from './employee/EmployeeHeader';
 import CurrentTicketCard from './employee/CurrentTicketCard';
@@ -28,6 +28,9 @@ export default function EmpleadoUser() {
 
   // CRITICAL FIX: Auto-activate employee on login
   const [hasAutoActivated, setHasAutoActivated] = useState(false);
+  
+  // CRITICAL NEW: Track if cleanup has been registered
+  const cleanupRegisteredRef = useRef(false);
 
   // Custom hooks for modular functionality
   const {
@@ -83,9 +86,144 @@ export default function EmpleadoUser() {
     }
   }, [currentEmployee, state.isFirebaseConnected, hasAutoActivated]);
 
-  const handleLogout = () => {
+  // CRITICAL NEW: Auto-deactivate employee on logout or unexpected closure
+  useEffect(() => {
+    const setupEmployeeCleanup = () => {
+      if (!currentEmployee || !state.isFirebaseConnected || cleanupRegisteredRef.current) {
+        return;
+      }
+
+      console.log('🛡️ CLEANUP SETUP: Registering employee cleanup handlers', {
+        employeeId: currentEmployee.id,
+        employeeName: currentEmployee.name
+      });
+
+      // CRITICAL: Function to deactivate employee safely
+      const deactivateEmployee = async (reason: string) => {
+        try {
+          console.log(`🔄 EMPLOYEE CLEANUP: ${reason} - Checking employee state`, {
+            employeeId: currentEmployee.id,
+            employeeName: currentEmployee.name,
+            hasCurrentTicket: !!currentEmployee.currentTicketId,
+            isActive: currentEmployee.isActive
+          });
+
+          // CRITICAL: Only deactivate if employee doesn't have a current ticket
+          if (!currentEmployee.currentTicketId) {
+            console.log(`⏸️ EMPLOYEE CLEANUP: ${reason} - Deactivating employee (no current ticket)`);
+            
+            await employeeService.updateEmployee(currentEmployee.id, {
+              isActive: false,   // CRITICAL: Set to inactive
+              isPaused: true     // CRITICAL: Set to paused
+            });
+
+            console.log(`✅ EMPLOYEE CLEANUP: ${reason} - Employee deactivated successfully`);
+          } else {
+            console.log(`🎫 EMPLOYEE CLEANUP: ${reason} - Employee has current ticket, keeping active`, {
+              currentTicketId: currentEmployee.currentTicketId
+            });
+          }
+        } catch (error) {
+          console.error(`❌ EMPLOYEE CLEANUP ERROR (${reason}):`, error);
+        }
+      };
+
+      // CRITICAL: Handle page unload (browser close, refresh, navigation)
+      const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+        console.log('🚪 BEFORE UNLOAD: Page is being closed/refreshed');
+        
+        // CRITICAL: Only deactivate if no current ticket
+        if (!currentEmployee.currentTicketId) {
+          // Use navigator.sendBeacon for reliable cleanup on page unload
+          const cleanupData = JSON.stringify({
+            employeeId: currentEmployee.id,
+            action: 'deactivate',
+            reason: 'page_unload',
+            timestamp: new Date().toISOString()
+          });
+
+          // Try to send cleanup request
+          if (navigator.sendBeacon) {
+            // In a real implementation, this would go to a cleanup endpoint
+            console.log('📡 BEACON: Sending cleanup signal via beacon');
+          }
+
+          // Also try immediate cleanup (may not complete)
+          deactivateEmployee('Page Unload');
+        }
+      };
+
+      // CRITICAL: Handle visibility change (tab switch, minimize)
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          console.log('👁️ VISIBILITY: Page hidden (tab switch/minimize)');
+          // Don't deactivate on visibility change, only on actual unload
+        } else {
+          console.log('👁️ VISIBILITY: Page visible again');
+        }
+      };
+
+      // CRITICAL: Handle focus loss (window loses focus)
+      const handleWindowBlur = () => {
+        console.log('🔍 FOCUS: Window lost focus');
+        // Don't deactivate on focus loss, only on actual unload
+      };
+
+      // CRITICAL: Register event listeners
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('blur', handleWindowBlur);
+
+      // Mark cleanup as registered
+      cleanupRegisteredRef.current = true;
+
+      console.log('✅ CLEANUP SETUP: All cleanup handlers registered successfully');
+
+      // CRITICAL: Return cleanup function
+      return () => {
+        console.log('🧹 CLEANUP TEARDOWN: Removing event listeners');
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('blur', handleWindowBlur);
+        cleanupRegisteredRef.current = false;
+      };
+    };
+
+    // Setup cleanup when employee is available and connected
+    if (currentEmployee && state.isFirebaseConnected) {
+      return setupEmployeeCleanup();
+    }
+  }, [currentEmployee, state.isFirebaseConnected]);
+
+  // CRITICAL NEW: Enhanced logout handler with proper cleanup
+  const handleLogout = useCallback(async () => {
+    console.log('🚪 LOGOUT: Employee logout initiated');
+
+    // CRITICAL: Deactivate employee before logout (unless they have a current ticket)
+    if (currentEmployee && state.isFirebaseConnected) {
+      try {
+        if (!currentEmployee.currentTicketId) {
+          console.log('⏸️ LOGOUT: Deactivating employee before logout (no current ticket)');
+          
+          await employeeService.updateEmployee(currentEmployee.id, {
+            isActive: false,   // CRITICAL: Set to inactive
+            isPaused: true     // CRITICAL: Set to paused
+          });
+
+          console.log('✅ LOGOUT: Employee deactivated successfully before logout');
+        } else {
+          console.log('🎫 LOGOUT: Employee has current ticket, keeping active during logout', {
+            currentTicketId: currentEmployee.currentTicketId
+          });
+        }
+      } catch (error) {
+        console.error('❌ LOGOUT CLEANUP ERROR:', error);
+      }
+    }
+
+    // CRITICAL: Proceed with normal logout
     dispatch({ type: 'LOGOUT' });
-  };
+  }, [currentEmployee, state.isFirebaseConnected, dispatch]);
 
   const handleDeriveTicketAction = async (
     targetType: 'queue' | 'employee',
