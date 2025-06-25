@@ -32,7 +32,7 @@ export default function EmpleadoUser() {
     handleCompleteTicket,
     handleCancelTicket,
     handleDeriveTicket,
-    handleRecallTicket, // NEW: Recall function
+    handleRecallTicket,
     handleTogglePause,
     isLoading
   } = useEmployeeTicketManagement(currentEmployee?.id || '');
@@ -92,7 +92,6 @@ export default function EmpleadoUser() {
     }
   };
 
-  // NEW: Handle recall ticket
   const handleRecallTicketAction = async () => {
     if (!currentTicket || !currentEmployee) return;
 
@@ -149,7 +148,7 @@ export default function EmpleadoUser() {
                   onCompleteTicket={(callNext) => handleCompleteTicket(currentTicket.id, callNext)}
                   onCancelTicket={() => setShowCancelModal(true)}
                   onDeriveTicket={() => setShowDeriveModal(true)}
-                  onRecallTicket={handleRecallTicketAction} // NEW: Recall function
+                  onRecallTicket={handleRecallTicketAction}
                 />
               ) : (
                 <div className="bg-white rounded-2xl shadow-xl p-6">
