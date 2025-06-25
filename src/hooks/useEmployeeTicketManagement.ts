@@ -198,10 +198,14 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // CRITICAL FIX: Enhanced toggle pause with immediate activation
+  // CRITICAL FIX: Enhanced toggle pause that ALWAYS works regardless of ticket availability
   const handleTogglePause = async () => {
-    if (!currentEmployee) return;
+    if (!currentEmployee) {
+      console.error('❌ TOGGLE PAUSE: No current employee found');
+      return;
+    }
 
+    // CRITICAL: Only check for current ticket, not for waiting tickets
     if (currentTicket) {
       alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
       return;
@@ -212,21 +216,21 @@ export function useEmployeeTicketManagement(employeeId: string) {
       const newPauseState = !currentEmployee.isPaused;
       
       console.log(`🔄 TOGGLE PAUSE: Employee ${currentEmployee.name} changing pause state from ${currentEmployee.isPaused} to ${newPauseState}`);
+      console.log(`📊 CONTEXT: Current ticket: ${currentTicket ? 'YES' : 'NO'}, Waiting tickets: ${waitingTickets.length}, Is loading: ${isLoading}`);
       
-      // CRITICAL FIX: Update employee pause state IMMEDIATELY
+      // CRITICAL FIX: Update employee pause state IMMEDIATELY - NO CONDITIONS
       await employeeService.updateEmployee(employeeId, {
         ...currentEmployee,
         isPaused: newPauseState
       });
+
+      console.log(`✅ TOGGLE PAUSE: Employee pause state updated successfully to ${newPauseState}`);
 
       // CRITICAL FIX: If resuming (unpausing), employee becomes ACTIVE immediately
       if (currentEmployee.isPaused && !newPauseState) {
         console.log('🎯 RESUME: Employee resuming and becoming ACTIVE immediately');
         
         // IMPORTANT: Employee is now ACTIVE and ready to receive tickets
-        // No need to wait - the auto-assignment will happen when tickets arrive
-        // or when the employee manually takes a ticket
-        
         // Try to auto-assign if there are tickets available
         setTimeout(async () => {
           try {
@@ -241,10 +245,12 @@ export function useEmployeeTicketManagement(employeeId: string) {
             // Employee is still active even if auto-assignment fails
           }
         }, 500);
+      } else if (!currentEmployee.isPaused && newPauseState) {
+        console.log('⏸️ PAUSE: Employee paused successfully');
       }
       
     } catch (error) {
-      console.error('Error toggling pause:', error);
+      console.error('❌ TOGGLE PAUSE ERROR:', error);
       alert('Error al cambiar estado de pausa');
     } finally {
       setIsLoading(false);
