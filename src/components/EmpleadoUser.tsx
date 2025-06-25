@@ -4,7 +4,6 @@ import EmployeeHeader from './employee/EmployeeHeader';
 import CurrentTicketCard from './employee/CurrentTicketCard';
 import QueueList from './employee/QueueList';
 import QueueStatusCard from './employee/QueueStatusCard';
-import EmployeeStats from './employee/EmployeeStats';
 import EmployeeProfile from './employee/EmployeeProfile';
 import EnhancedDeriveTicketModal from './employee/EnhancedDeriveTicketModal';
 import CancelTicketModal from './employee/CancelTicketModal';
@@ -13,7 +12,7 @@ import { useEmployeeTicketManagement } from '../hooks/useEmployeeTicketManagemen
 import { useEmployeeTimer } from '../hooks/useEmployeeTimer';
 import { useEmployeeQueueStats } from '../hooks/useEmployeeQueueStats';
 
-type TabType = 'queue' | 'profile' | 'stats';
+type TabType = 'queue' | 'profile';
 
 export default function EmpleadoUser() {
   const { state, dispatch } = useApp();
@@ -33,6 +32,7 @@ export default function EmpleadoUser() {
     handleCompleteTicket,
     handleCancelTicket,
     handleDeriveTicket,
+    handleRecallTicket, // NEW: Recall function
     handleTogglePause,
     isLoading
   } = useEmployeeTicketManagement(currentEmployee?.id || '');
@@ -92,9 +92,20 @@ export default function EmpleadoUser() {
     }
   };
 
+  // NEW: Handle recall ticket
+  const handleRecallTicketAction = async () => {
+    if (!currentTicket || !currentEmployee) return;
+
+    try {
+      await handleRecallTicket(currentTicket.id);
+    } catch (error) {
+      console.error('Error recalling ticket:', error);
+      alert('Error al volver a llamar el ticket');
+    }
+  };
+
   const tabs = [
     { id: 'queue', name: 'Cola de Tickets', icon: 'Clock' },
-    { id: 'stats', name: 'Estadísticas', icon: 'BarChart3' },
     { id: 'profile', name: 'Mi Perfil', icon: 'User' },
   ];
 
@@ -138,6 +149,7 @@ export default function EmpleadoUser() {
                   onCompleteTicket={(callNext) => handleCompleteTicket(currentTicket.id, callNext)}
                   onCancelTicket={() => setShowCancelModal(true)}
                   onDeriveTicket={() => setShowDeriveModal(true)}
+                  onRecallTicket={handleRecallTicketAction} // NEW: Recall function
                 />
               ) : (
                 <div className="bg-white rounded-2xl shadow-xl p-6">
@@ -195,9 +207,6 @@ export default function EmpleadoUser() {
             />
           </div>
         );
-
-      case 'stats':
-        return <EmployeeStats employee={currentEmployee} />;
 
       case 'profile':
         return (

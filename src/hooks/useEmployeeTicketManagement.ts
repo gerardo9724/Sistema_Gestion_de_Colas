@@ -149,6 +149,27 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
+  // NEW: Recall ticket function
+  const handleRecallTicket = async (ticketId: string) => {
+    if (!currentEmployee || !currentTicket) return;
+
+    setIsLoading(true);
+    try {
+      // Update the servedAt time to trigger a new audio announcement
+      const now = new Date();
+      await ticketService.updateTicket(ticketId, {
+        servedAt: now, // This will trigger the audio system to announce again
+      });
+
+      console.log(`🔊 RECALL: Ticket ${currentTicket.number} recalled by ${currentEmployee.name}`);
+    } catch (error) {
+      console.error('Error recalling ticket:', error);
+      alert('Error al volver a llamar el ticket');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleTogglePause = async () => {
     if (!currentEmployee) return;
 
@@ -178,6 +199,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     handleCompleteTicket,
     handleCancelTicket,
     handleDeriveTicket,
+    handleRecallTicket, // NEW: Export recall function
     handleTogglePause,
     isLoading
   };
