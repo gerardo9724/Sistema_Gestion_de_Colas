@@ -182,7 +182,7 @@ export interface CarouselImage {
   createdBy?: string;
 }
 
-export interface TicketTemplate {
+interface TicketTemplate {
   id: string;
   name: string;
   template: string;
@@ -194,7 +194,7 @@ export interface TicketTemplate {
   createdBy?: string;
 }
 
-export interface CancellationReason {
+interface CancellationReason {
   id: string;
   name: string;
   description?: string;

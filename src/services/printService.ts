@@ -367,7 +367,7 @@ const DETAILED_THERMAL_TEMPLATE = `
 </html>
 `;
 
-export interface PrintOptions {
+interface PrintOptions {
   enablePrint: boolean;
   printerName?: string;
   paperSize: 'thermal_58mm' | 'thermal_80mm' | 'a4' | 'letter';

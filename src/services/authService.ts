@@ -21,12 +21,12 @@ const verifyPassword = (password: string, hash: string): boolean => {
   return hashPassword(password) === hash;
 };
 
-export interface LoginCredentials {
+interface LoginCredentials {
   username: string;
   password: string;
 }
 
-export interface LoginResult {
+interface LoginResult {
   success: boolean;
   user?: User;
   employee?: Employee;

@@ -18,7 +18,7 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
 // Initialize Auth
-export const auth = getAuth(app);
+const auth = getAuth(app);
 
 // Test connection function
 export const testFirebaseConnection = async (): Promise<boolean> => {
@@ -33,4 +33,3 @@ export const testFirebaseConnection = async (): Promise<boolean> => {
   }
 };
 
-export default app;
