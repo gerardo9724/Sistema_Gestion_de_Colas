@@ -79,9 +79,9 @@ export default function EmployeeHeader({
     try {
       console.log('🚀 EXECUTING TOGGLE PAUSE: Calling function...');
       
-      // CRITICAL FIX: Add loading state and timeout protection
+      // CRITICAL FIX: Add loading state and timeout protection - increased timeout to 30 seconds
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout: La operación tardó demasiado')), 10000);
+        setTimeout(() => reject(new Error('Timeout: La operación tardó demasiado')), 30000);
       });
 
       await Promise.race([
