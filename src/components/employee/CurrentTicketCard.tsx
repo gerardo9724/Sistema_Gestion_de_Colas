@@ -10,7 +10,7 @@ interface CurrentTicketCardProps {
   onCompleteTicket: (callNext?: boolean) => void;
   onCancelTicket: () => void;
   onDeriveTicket: () => void;
-  onRecallTicket: () => void; // NEW: Recall function
+  onRecallTicket: () => void;
 }
 
 export default function CurrentTicketCard({
@@ -60,58 +60,63 @@ export default function CurrentTicketCard({
               </div>
               <button
                 onClick={onToggleTimer}
-                className="mt-2 p-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors"
+                className="mt-2 p-2 rounded-lg bg-gray-200 hover:bg-gray-300 active:bg-gray-400 active:scale-95 transition-all duration-150"
               >
                 {isTimerRunning ? <Pause size={20} /> : <Play size={20} />}
               </button>
             </div>
           </div>
           
-          {/* Action Buttons Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {/* Action Buttons Grid - Solo Iconos con Efectos de Pulsación */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             {/* Complete Button */}
             <button
               onClick={() => onCompleteTicket()}
-              className="bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+              className="group bg-green-500 hover:bg-green-600 active:bg-green-700 text-white p-4 rounded-xl font-semibold transition-all duration-150 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center"
+              title="Completar ticket"
             >
-              <CheckCircle size={18} />
-              <span>Completar</span>
+              <CheckCircle size={24} className="group-active:scale-110 transition-transform duration-150" />
             </button>
             
             {/* Complete and Next Button */}
             <button
               onClick={() => onCompleteTicket(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+              className="group bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white p-4 rounded-xl font-semibold transition-all duration-150 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center"
+              title="Completar y llamar siguiente"
             >
-              <SkipForward size={18} />
-              <span>Siguiente</span>
+              <SkipForward size={24} className="group-active:scale-110 transition-transform duration-150" />
             </button>
             
-            {/* NEW: Recall Button */}
+            {/* Recall Button con Animación Especial */}
             <button
               onClick={onRecallTicket}
-              className="bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+              className="group bg-yellow-500 hover:bg-yellow-600 active:bg-yellow-700 text-white p-4 rounded-xl font-semibold transition-all duration-150 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center relative overflow-hidden"
+              title="Volver a llamar ticket"
             >
-              <Volume2 size={18} />
-              <span>Llamar</span>
+              {/* Efecto de ondas al presionar */}
+              <div className="absolute inset-0 bg-white opacity-0 group-active:opacity-20 group-active:animate-ping rounded-xl"></div>
+              <Volume2 
+                size={24} 
+                className="group-active:scale-125 group-hover:animate-pulse transition-all duration-150 relative z-10" 
+              />
             </button>
             
             {/* Derive Button */}
             <button
               onClick={onDeriveTicket}
-              className="bg-purple-500 hover:bg-purple-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+              className="group bg-purple-500 hover:bg-purple-600 active:bg-purple-700 text-white p-4 rounded-xl font-semibold transition-all duration-150 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center"
+              title="Derivar ticket"
             >
-              <ArrowRight size={18} />
-              <span>Derivar</span>
+              <ArrowRight size={24} className="group-active:scale-110 group-active:translate-x-1 transition-all duration-150" />
             </button>
             
             {/* Cancel Button */}
             <button
               onClick={onCancelTicket}
-              className="bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+              className="group bg-red-500 hover:bg-red-600 active:bg-red-700 text-white p-4 rounded-xl font-semibold transition-all duration-150 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center"
+              title="Cancelar ticket"
             >
-              <X size={18} />
-              <span>Cancelar</span>
+              <X size={24} className="group-active:scale-110 group-active:rotate-90 transition-all duration-150" />
             </button>
           </div>
         </div>
