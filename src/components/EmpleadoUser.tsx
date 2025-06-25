@@ -26,9 +26,6 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
 
-  // CRITICAL FIX: Auto-activate employee on login
-  const [hasAutoActivated, setHasAutoActivated] = useState(false);
-  
   // CRITICAL NEW: Track if cleanup has been registered
   const cleanupRegisteredRef = useRef(false);
 
@@ -52,39 +49,6 @@ export default function EmpleadoUser() {
   } = useEmployeeTimer(currentTicket);
 
   const queueStats = useEmployeeQueueStats(currentEmployee?.id || '');
-
-  // CRITICAL FIX: Auto-activate employee when they log in
-  useEffect(() => {
-    const autoActivateEmployee = async () => {
-      if (currentEmployee && !hasAutoActivated && state.isFirebaseConnected) {
-        console.log('🚀 AUTO-ACTIVATE: Employee login detected, activating employee', {
-          employeeId: currentEmployee.id,
-          employeeName: currentEmployee.name,
-          currentIsActive: currentEmployee.isActive,
-          currentIsPaused: currentEmployee.isPaused
-        });
-
-        try {
-          // CRITICAL: Set employee to active state on login
-          await employeeService.updateEmployee(currentEmployee.id, {
-            isActive: true,    // CRITICAL: Employee becomes active on login
-            isPaused: false    // CRITICAL: Employee is not paused on login
-          });
-
-          setHasAutoActivated(true);
-          console.log('✅ AUTO-ACTIVATE: Employee activated successfully on login');
-
-        } catch (error) {
-          console.error('❌ AUTO-ACTIVATE ERROR:', error);
-        }
-      }
-    };
-
-    // Only run once when employee is available and connected
-    if (currentEmployee && state.isFirebaseConnected && !hasAutoActivated) {
-      autoActivateEmployee();
-    }
-  }, [currentEmployee, state.isFirebaseConnected, hasAutoActivated]);
 
   // CRITICAL NEW: Auto-deactivate employee on logout or unexpected closure
   useEffect(() => {
