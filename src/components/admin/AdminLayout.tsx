@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogOut, Users, User, Settings, Cog, Monitor, Tablet, Building, UserCheck } from 'lucide-react';
+import { LogOut, Users, User, Settings, Cog, Monitor, Tablet, Building, UserCheck, Ticket } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 
 interface AdminLayoutProps {
@@ -17,7 +17,7 @@ export default function AdminLayout({ children, activeSection, onSectionChange }
 
   const menuItems = [
     { id: 'employees', name: 'Empleados', icon: Users },
-    { id: 'employee-management', name: 'Gestión Empleados', icon: UserCheck }, // NEW: Real-time employee management
+    { id: 'ticket-management', name: 'Gestión Tickets', icon: Ticket }, // RENAMED: From "Gestión Empleados" to "Gestión Tickets"
     { id: 'users', name: 'Usuarios', icon: User },
     { id: 'services', name: 'Servicios', icon: Cog },
     { id: 'carousel', name: 'Configuración Nodo', icon: Monitor },
