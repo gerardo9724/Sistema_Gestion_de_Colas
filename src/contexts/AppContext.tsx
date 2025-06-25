@@ -25,7 +25,7 @@ const initialState: AppState = {
   carouselImages: [],
   ticketTemplates: [],
   cancellationReasons: [],
-  ticketDerivations: [],
+  ticketDerivations: [], // NEW: Track derivations
   currentUser: null,
   currentEmployee: null,
   currentComputerProfile: null,
@@ -56,7 +56,7 @@ type AppAction =
   | { type: 'SET_SYSTEM_SETTINGS'; payload: SystemSettings | null }
   | { type: 'SET_NODE_CONFIGURATION'; payload: NodeConfiguration | null }
   | { type: 'SET_CAROUSEL_IMAGES'; payload: CarouselImage[] }
-  | { type: 'SET_TICKET_DERIVATIONS'; payload: TicketDerivation[] }
+  | { type: 'SET_TICKET_DERIVATIONS'; payload: TicketDerivation[] } // NEW
   | { type: 'ADD_TICKET'; payload: Ticket }
   | { type: 'SET_CURRENT_USER'; payload: User | null }
   | { type: 'SET_CURRENT_EMPLOYEE'; payload: Employee | null }
@@ -103,7 +103,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_CAROUSEL_IMAGES':
       return { ...state, carouselImages: action.payload };
     
-    case 'SET_TICKET_DERIVATIONS':
+    case 'SET_TICKET_DERIVATIONS': // NEW
       return { ...state, ticketDerivations: action.payload };
     
     case 'ADD_TICKET':
@@ -163,6 +163,7 @@ const AppContext = createContext<{
   updatePrintSettings: (settings: Partial<PrintSettings>) => void;
   testPrint: () => Promise<boolean>;
   previewTicket: (ticket: Ticket) => void;
+  // NEW: Derivation workflow functions
   deriveTicketToEmployee: (ticketId: string, fromEmployeeId: string, toEmployeeId: string, options?: any) => Promise<void>;
   deriveTicketToQueue: (ticketId: string, fromEmployeeId: string, options?: any) => Promise<void>;
   getEmployeeQueueStats: (employeeId: string) => Promise<any>;
@@ -190,12 +191,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.isFirebaseConnected]);
 
-  // Global cleanup handler for unexpected app closure
+  // CRITICAL NEW: Global cleanup handler for unexpected app closure
   useEffect(() => {
     const setupGlobalCleanup = () => {
       console.log('🛡️ GLOBAL CLEANUP: Setting up app-level cleanup handlers');
 
-      // Handle app-level cleanup on page unload
+      // CRITICAL: Handle app-level cleanup on page unload
       const handleAppUnload = async () => {
         console.log('🚪 APP UNLOAD: Application is closing, checking for active employees');
 
@@ -234,7 +235,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       };
 
-      // Register global unload handler
+      // CRITICAL: Register global unload handler
       const handleBeforeUnload = (event: BeforeUnloadEvent) => {
         // Only run cleanup if we have Firebase connection and employees
         if (state.isFirebaseConnected && state.employees.length > 0) {
@@ -301,7 +302,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_CAROUSEL_IMAGES', payload: images });
     });
 
-    // Subscribe to ticket derivations
+    // NEW: Subscribe to ticket derivations
     const unsubscribeDerivations = ticketDerivationService.subscribeToDerivations((derivations) => {
       dispatch({ type: 'SET_TICKET_DERIVATIONS', payload: derivations });
     });
@@ -316,11 +317,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubscribeSystemSettings();
       unsubscribeNodeConfiguration();
       unsubscribeCarousel();
-      unsubscribeDerivations();
+      unsubscribeDerivations(); // NEW
     };
   }, [state.isFirebaseConnected]);
 
-  // Monitor for new tickets and auto-assign to available employees
+  // CRITICAL NEW: Monitor for new tickets and auto-assign to available employees
   useEffect(() => {
     if (!state.isFirebaseConnected || state.tickets.length === 0) return;
 
@@ -437,7 +438,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         systemSettingsService.getSystemSettings(),
         nodeConfigurationService.getNodeConfiguration(),
         carouselService.getAllCarouselImages(),
-        ticketDerivationService.getAllDerivations(),
+        ticketDerivationService.getAllDerivations(), // NEW
       ]);
 
       dispatch({ type: 'SET_TICKETS', payload: tickets });
@@ -448,7 +449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_SYSTEM_SETTINGS', payload: systemSettings });
       dispatch({ type: 'SET_NODE_CONFIGURATION', payload: nodeConfiguration });
       dispatch({ type: 'SET_CAROUSEL_IMAGES', payload: carouselImages });
-      dispatch({ type: 'SET_TICKET_DERIVATIONS', payload: derivations });
+      dispatch({ type: 'SET_TICKET_DERIVATIONS', payload: derivations }); // NEW
 
       console.log('Initial data loaded successfully');
     } catch (error) {
@@ -547,7 +548,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Attempt immediate auto-assignment to available employees
+      // CRITICAL NEW: Attempt immediate auto-assignment to available employees
       console.log('🤖 ATTEMPTING AUTO-ASSIGNMENT for new ticket...');
       
       try {
@@ -596,7 +597,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // Derive ticket to employee
+  // NEW: Derive ticket to employee
   const deriveTicketToEmployee = async (
     ticketId: string, 
     fromEmployeeId: string, 
@@ -611,7 +612,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Derive ticket to general queue
+  // NEW: Derive ticket to general queue
   const deriveTicketToQueue = async (
     ticketId: string, 
     fromEmployeeId: string, 
@@ -625,7 +626,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Get employee queue statistics
+  // NEW: Get employee queue statistics
   const getEmployeeQueueStats = async (employeeId: string) => {
     try {
       return await ticketQueueService.getEmployeeQueueStats(employeeId);
@@ -640,7 +641,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Auto-assign next ticket
+  // NEW: Auto-assign next ticket
   const autoAssignNextTicket = async (employeeId: string) => {
     try {
       return await ticketQueueService.autoAssignNextTicket(employeeId);
@@ -663,6 +664,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatePrintSettings,
       testPrint,
       previewTicket,
+      // NEW: Derivation workflow functions
       deriveTicketToEmployee,
       deriveTicketToQueue,
       getEmployeeQueueStats,

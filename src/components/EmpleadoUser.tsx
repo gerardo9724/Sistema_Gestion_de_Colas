@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../contexts/AppContext';
 import EmployeeHeader from './employee/EmployeeHeader';
-import EmployeeAvailabilityControl from './employee/EmployeeAvailabilityControl';
 import CurrentTicketCard from './employee/CurrentTicketCard';
 import QueueList from './employee/QueueList';
 import QueueStatusCard from './employee/QueueStatusCard';
@@ -27,7 +26,7 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
 
-  // Track if cleanup has been registered
+  // CRITICAL: Track if cleanup has been registered
   const cleanupRegisteredRef = useRef(false);
 
   // Custom hooks for modular functionality
@@ -39,6 +38,7 @@ export default function EmpleadoUser() {
     handleCancelTicket,
     handleDeriveTicket,
     handleRecallTicket,
+    handleToggleAvailability, // NEW: Renamed from handleTogglePause
     isLoading
   } = useEmployeeTicketManagement(currentEmployee?.id || '');
 
@@ -50,7 +50,7 @@ export default function EmpleadoUser() {
 
   const queueStats = useEmployeeQueueStats(currentEmployee?.id || '');
 
-  // Auto-deactivate employee on logout or unexpected closure
+  // CRITICAL: Auto-deactivate employee on logout or unexpected closure
   useEffect(() => {
     const setupEmployeeCleanup = () => {
       if (!currentEmployee || !state.isFirebaseConnected || cleanupRegisteredRef.current) {
@@ -62,6 +62,7 @@ export default function EmpleadoUser() {
         employeeName: currentEmployee.name
       });
 
+      // CRITICAL: Function to deactivate employee safely
       const deactivateEmployee = async (reason: string) => {
         try {
           console.log(`🔄 EMPLOYEE CLEANUP: ${reason} - Checking employee state`, {
@@ -71,12 +72,13 @@ export default function EmpleadoUser() {
             isActive: currentEmployee.isActive
           });
 
+          // CRITICAL: Only deactivate if employee doesn't have a current ticket
           if (!currentEmployee.currentTicketId) {
             console.log(`⏸️ EMPLOYEE CLEANUP: ${reason} - Deactivating employee (no current ticket)`);
             
             await employeeService.updateEmployee(currentEmployee.id, {
-              isActive: false,
-              isPaused: true
+              isActive: false,   // CRITICAL: Set to inactive
+              isPaused: true     // CRITICAL: Set to paused
             });
 
             console.log(`✅ EMPLOYEE CLEANUP: ${reason} - Employee deactivated successfully`);
@@ -90,10 +92,13 @@ export default function EmpleadoUser() {
         }
       };
 
+      // CRITICAL: Handle page unload (browser close, refresh, navigation)
       const handleBeforeUnload = (event: BeforeUnloadEvent) => {
         console.log('🚪 BEFORE UNLOAD: Page is being closed/refreshed');
         
+        // CRITICAL: Only deactivate if no current ticket
         if (!currentEmployee.currentTicketId) {
+          // Use navigator.sendBeacon for reliable cleanup on page unload
           const cleanupData = JSON.stringify({
             employeeId: currentEmployee.id,
             action: 'deactivate',
@@ -101,34 +106,44 @@ export default function EmpleadoUser() {
             timestamp: new Date().toISOString()
           });
 
+          // Try to send cleanup request
           if (navigator.sendBeacon) {
+            // In a real implementation, this would go to a cleanup endpoint
             console.log('📡 BEACON: Sending cleanup signal via beacon');
           }
 
+          // Also try immediate cleanup (may not complete)
           deactivateEmployee('Page Unload');
         }
       };
 
+      // CRITICAL: Handle visibility change (tab switch, minimize)
       const handleVisibilityChange = () => {
         if (document.hidden) {
           console.log('👁️ VISIBILITY: Page hidden (tab switch/minimize)');
+          // Don't deactivate on visibility change, only on actual unload
         } else {
           console.log('👁️ VISIBILITY: Page visible again');
         }
       };
 
+      // CRITICAL: Handle focus loss (window loses focus)
       const handleWindowBlur = () => {
         console.log('🔍 FOCUS: Window lost focus');
+        // Don't deactivate on focus loss, only on actual unload
       };
 
+      // CRITICAL: Register event listeners
       window.addEventListener('beforeunload', handleBeforeUnload);
       document.addEventListener('visibilitychange', handleVisibilityChange);
       window.addEventListener('blur', handleWindowBlur);
 
+      // Mark cleanup as registered
       cleanupRegisteredRef.current = true;
 
       console.log('✅ CLEANUP SETUP: All cleanup handlers registered successfully');
 
+      // CRITICAL: Return cleanup function
       return () => {
         console.log('🧹 CLEANUP TEARDOWN: Removing event listeners');
         window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -138,23 +153,25 @@ export default function EmpleadoUser() {
       };
     };
 
+    // Setup cleanup when employee is available and connected
     if (currentEmployee && state.isFirebaseConnected) {
       return setupEmployeeCleanup();
     }
   }, [currentEmployee, state.isFirebaseConnected]);
 
-  // Enhanced logout handler with proper cleanup
+  // CRITICAL: Enhanced logout handler with proper cleanup
   const handleLogout = useCallback(async () => {
     console.log('🚪 LOGOUT: Employee logout initiated');
 
+    // CRITICAL: Deactivate employee before logout (unless they have a current ticket)
     if (currentEmployee && state.isFirebaseConnected) {
       try {
         if (!currentEmployee.currentTicketId) {
           console.log('⏸️ LOGOUT: Deactivating employee before logout (no current ticket)');
           
           await employeeService.updateEmployee(currentEmployee.id, {
-            isActive: false,
-            isPaused: true
+            isActive: false,   // CRITICAL: Set to inactive
+            isPaused: true     // CRITICAL: Set to paused
           });
 
           console.log('✅ LOGOUT: Employee deactivated successfully before logout');
@@ -168,6 +185,7 @@ export default function EmpleadoUser() {
       }
     }
 
+    // CRITICAL: Proceed with normal logout
     dispatch({ type: 'LOGOUT' });
   }, [currentEmployee, state.isFirebaseConnected, dispatch]);
 
@@ -248,9 +266,9 @@ export default function EmpleadoUser() {
       case 'queue':
         return (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Left Column */}
+            {/* Current Service */}
             <div className="space-y-6">
-              {/* DEBUG PANEL - TEMPORARY FOR VALIDATION */}
+              {/* CRITICAL: DEBUG PANEL - TEMPORARY FOR VALIDATION */}
               <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 shadow-lg">
                 <h3 className="text-lg font-bold text-yellow-800 mb-3 flex items-center space-x-2">
                   <span>🐛</span>
@@ -313,14 +331,6 @@ export default function EmpleadoUser() {
                 </div>
               </div>
 
-              {/* NEW: Employee Availability Control */}
-              <EmployeeAvailabilityControl
-                employee={currentEmployee}
-                hasCurrentTicket={!!currentTicket}
-                isConnected={state.isFirebaseConnected}
-              />
-
-              {/* Current Service */}
               {currentTicket ? (
                 <CurrentTicketCard
                   ticket={currentTicket}
@@ -335,14 +345,15 @@ export default function EmpleadoUser() {
               ) : (
                 <div className="bg-white rounded-2xl shadow-xl p-6">
                   <h2 className="text-2xl font-bold text-gray-800 mb-6">Servicio Actual</h2>
+                  {/* CRITICAL: Use isActive instead of isPaused for display logic */}
                   {!currentEmployee.isActive ? (
                     <div className="text-center py-12">
                       <div className="text-6xl mb-4">🛑</div>
-                      <h3 className="text-2xl font-bold text-gray-800 mb-2">No Disponible</h3>
+                      <h3 className="text-2xl font-bold text-gray-800 mb-2">Detenido</h3>
                       <p className="text-lg text-gray-600 mb-6">
                         {waitingTickets.length > 0 
-                          ? 'Usa el control de disponibilidad para comenzar a atender tickets'
-                          : 'No hay tickets pendientes. Usa el control de disponibilidad para estar listo...'
+                          ? 'Presiona "Iniciar" para comenzar a atender tickets'
+                          : 'No hay tickets pendientes. Presiona "Iniciar" para estar disponible...'
                         }
                       </p>
                       {waitingTickets.length > 0 && (
@@ -351,7 +362,7 @@ export default function EmpleadoUser() {
                             <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
                           </p>
                           <p className="text-yellow-700 text-xs">
-                            Al iniciar disponibilidad, automáticamente tomarás este ticket para atención
+                            Al iniciar, automáticamente tomarás este ticket para atención
                           </p>
                         </div>
                       )}
@@ -363,7 +374,7 @@ export default function EmpleadoUser() {
                       <p className="text-xl text-gray-500">No hay tickets en atención</p>
                       <p className="text-gray-400">
                         {waitingTickets.length > 0 
-                          ? 'Esperando asignación automática...'
+                          ? 'Esperando asignación automática o presiona "Detener" para no estar disponible'
                           : 'Esperando nuevos tickets...'
                         }
                       </p>
@@ -386,11 +397,11 @@ export default function EmpleadoUser() {
               />
             </div>
 
-            {/* Right Column */}
+            {/* Waiting Queue */}
             <QueueList
               tickets={waitingTickets}
               currentTicket={currentTicket}
-              isPaused={!currentEmployee.isActive}
+              isPaused={!currentEmployee.isActive} // Use !isActive instead of isPaused
               onStartService={handleStartService}
             />
           </div>
@@ -402,7 +413,7 @@ export default function EmpleadoUser() {
             currentUser={currentUser}
             currentEmployee={currentEmployee}
             onChangePassword={() => setShowPasswordModal(true)}
-            onUpdateProfile={() => {}}
+            onUpdateProfile={() => {}} // Disabled for employees
           />
         );
 
@@ -420,6 +431,7 @@ export default function EmpleadoUser() {
         isConnected={state.isFirebaseConnected}
         hasCurrentTicket={!!currentTicket}
         onLogout={handleLogout}
+        onToggleAvailability={handleToggleAvailability} // NEW: Renamed from onTogglePause
       />
 
       <div className="max-w-7xl mx-auto px-6 py-8">
