@@ -26,7 +26,7 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
 
-  // CRITICAL: Track if cleanup has been registered
+  // CRITICAL NEW: Track if cleanup has been registered
   const cleanupRegisteredRef = useRef(false);
 
   // Custom hooks for modular functionality
@@ -38,7 +38,7 @@ export default function EmpleadoUser() {
     handleCancelTicket,
     handleDeriveTicket,
     handleRecallTicket,
-    handleToggleAvailability, // NEW: Renamed from handleTogglePause
+    handleTogglePause,
     isLoading
   } = useEmployeeTicketManagement(currentEmployee?.id || '');
 
@@ -50,7 +50,7 @@ export default function EmpleadoUser() {
 
   const queueStats = useEmployeeQueueStats(currentEmployee?.id || '');
 
-  // CRITICAL: Auto-deactivate employee on logout or unexpected closure
+  // CRITICAL NEW: Auto-deactivate employee on logout or unexpected closure
   useEffect(() => {
     const setupEmployeeCleanup = () => {
       if (!currentEmployee || !state.isFirebaseConnected || cleanupRegisteredRef.current) {
@@ -159,7 +159,7 @@ export default function EmpleadoUser() {
     }
   }, [currentEmployee, state.isFirebaseConnected]);
 
-  // CRITICAL: Enhanced logout handler with proper cleanup
+  // CRITICAL NEW: Enhanced logout handler with proper cleanup
   const handleLogout = useCallback(async () => {
     console.log('🚪 LOGOUT: Employee logout initiated');
 
@@ -268,7 +268,7 @@ export default function EmpleadoUser() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Current Service */}
             <div className="space-y-6">
-              {/* CRITICAL: DEBUG PANEL - TEMPORARY FOR VALIDATION */}
+              {/* CRITICAL NEW: DEBUG PANEL - TEMPORARY FOR VALIDATION */}
               <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 shadow-lg">
                 <h3 className="text-lg font-bold text-yellow-800 mb-3 flex items-center space-x-2">
                   <span>🐛</span>
@@ -345,15 +345,15 @@ export default function EmpleadoUser() {
               ) : (
                 <div className="bg-white rounded-2xl shadow-xl p-6">
                   <h2 className="text-2xl font-bold text-gray-800 mb-6">Servicio Actual</h2>
-                  {/* CRITICAL: Use isActive instead of isPaused for display logic */}
+                  {/* CRITICAL FIX: Use isActive instead of isPaused for display logic */}
                   {!currentEmployee.isActive ? (
                     <div className="text-center py-12">
-                      <div className="text-6xl mb-4">🛑</div>
-                      <h3 className="text-2xl font-bold text-gray-800 mb-2">Detenido</h3>
+                      <div className="text-6xl mb-4">☕</div>
+                      <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
                       <p className="text-lg text-gray-600 mb-6">
                         {waitingTickets.length > 0 
-                          ? 'Presiona "Iniciar" para comenzar a atender tickets'
-                          : 'No hay tickets pendientes. Presiona "Iniciar" para estar disponible...'
+                          ? 'Presiona "Reanudar" para comenzar a atender tickets'
+                          : 'No hay tickets pendientes. Esperando nuevos tickets...'
                         }
                       </p>
                       {waitingTickets.length > 0 && (
@@ -362,19 +362,18 @@ export default function EmpleadoUser() {
                             <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
                           </p>
                           <p className="text-yellow-700 text-xs">
-                            Al iniciar, automáticamente tomarás este ticket para atención
+                            Al reanudar, automáticamente tomarás este ticket para atención
                           </p>
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="text-center py-12">
-                      <div className="text-6xl mb-4">✅</div>
-                      <h3 className="text-2xl font-bold text-gray-800 mb-2">Disponible</h3>
+                      <div className="text-6xl mb-4">👤</div>
                       <p className="text-xl text-gray-500">No hay tickets en atención</p>
                       <p className="text-gray-400">
                         {waitingTickets.length > 0 
-                          ? 'Esperando asignación automática o presiona "Detener" para no estar disponible'
+                          ? 'Esperando asignación automática o presiona "Pausar" para descansar'
                           : 'Esperando nuevos tickets...'
                         }
                       </p>
@@ -401,7 +400,7 @@ export default function EmpleadoUser() {
             <QueueList
               tickets={waitingTickets}
               currentTicket={currentTicket}
-              isPaused={!currentEmployee.isActive} // Use !isActive instead of isPaused
+              isPaused={!currentEmployee.isActive} // CRITICAL FIX: Use !isActive instead of isPaused
               onStartService={handleStartService}
             />
           </div>
@@ -429,9 +428,10 @@ export default function EmpleadoUser() {
         currentUser={currentUser}
         currentEmployee={currentEmployee}
         isConnected={state.isFirebaseConnected}
+        isPaused={!currentEmployee.isActive} // CRITICAL FIX: Use !isActive instead of isPaused
         hasCurrentTicket={!!currentTicket}
         onLogout={handleLogout}
-        onToggleAvailability={handleToggleAvailability} // NEW: Renamed from onTogglePause
+        onTogglePause={handleTogglePause}
       />
 
       <div className="max-w-7xl mx-auto px-6 py-8">

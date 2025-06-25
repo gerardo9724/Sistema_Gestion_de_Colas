@@ -1,30 +1,32 @@
 import React, { useRef, useCallback, useMemo } from 'react';
-import { LogOut, Play, Square, Clock, Wifi, WifiOff, Bug } from 'lucide-react';
+import { LogOut, Play, Pause, Clock, Wifi, WifiOff, Bug } from 'lucide-react';
 import type { User, Employee } from '../../types';
 
 interface EmployeeHeaderProps {
   currentUser: User;
   currentEmployee: Employee;
   isConnected: boolean;
+  isPaused: boolean;
   hasCurrentTicket: boolean;
   onLogout: () => void;
-  onToggleAvailability: () => void; // NEW: Renamed from onTogglePause
+  onTogglePause: () => void;
 }
 
 export default function EmployeeHeader({
   currentUser,
   currentEmployee,
   isConnected,
+  isPaused,
   hasCurrentTicket,
   onLogout,
-  onToggleAvailability // NEW: Renamed from onTogglePause
+  onTogglePause
 }: EmployeeHeaderProps) {
   
-  // CRITICAL: Debounce click protection with simpler approach
+  // CRITICAL FIX: Debounce click protection with simpler approach
   const isClickInProgressRef = useRef<boolean>(false);
   const lastClickTimeRef = useRef<number>(0);
 
-  // CRITICAL: Memoize button state based on database values only
+  // CRITICAL FIX: Use ONLY database state for button logic (ignore prop isPaused)
   const buttonState = useMemo(() => {
     const dbIsActive = currentEmployee.isActive;
     const dbIsPaused = currentEmployee.isPaused;
@@ -38,7 +40,8 @@ export default function EmployeeHeader({
         dbIsActive,
         dbIsPaused,
         hasCurrentTicket,
-        buttonAction: dbIsActive ? 'STOP' : 'START',
+        buttonAction: dbIsActive ? 'PAUSE' : 'RESUME',
+        propIsPaused: isPaused, // For comparison only
         stateConsistency: dbIsActive === !dbIsPaused ? 'CONSISTENT' : 'INCONSISTENT'
       });
       lastClickTimeRef.current = currentTime;
@@ -47,14 +50,14 @@ export default function EmployeeHeader({
     return {
       isActive: dbIsActive,
       isPaused: dbIsPaused,
-      shouldShowStart: !dbIsActive, // If not active in DB, show start
-      shouldShowStop: dbIsActive,   // If active in DB, show stop
+      shouldShowResume: !dbIsActive, // If not active in DB, show resume
+      shouldShowPause: dbIsActive,   // If active in DB, show pause
       isDisabled: hasCurrentTicket || !isConnected || isClickInProgressRef.current
     };
-  }, [currentEmployee.isActive, currentEmployee.isPaused, hasCurrentTicket, isConnected, currentEmployee.id, currentEmployee.name]);
+  }, [currentEmployee.isActive, currentEmployee.isPaused, hasCurrentTicket, isConnected, currentEmployee.id, currentEmployee.name, isPaused]);
 
-  // CRITICAL: Optimized click handler with better debouncing
-  const handleToggleAvailabilityClick = useCallback(async () => {
+  // CRITICAL FIX: Optimized click handler with better debouncing
+  const handleTogglePauseClick = useCallback(async () => {
     const now = Date.now();
     
     // CRITICAL: Prevent rapid clicks (minimum 2 seconds between clicks)
@@ -70,15 +73,15 @@ export default function EmployeeHeader({
     }
 
     // CRITICAL: Validate function exists
-    if (typeof onToggleAvailability !== 'function') {
-      console.error('❌ CRITICAL ERROR: onToggleAvailability is not a function!');
+    if (typeof onTogglePause !== 'function') {
+      console.error('❌ CRITICAL ERROR: onTogglePause is not a function!');
       return;
     }
 
     // CRITICAL: Check blocking conditions
     if (hasCurrentTicket) {
       console.log('🚫 ACTION BLOCKED: Employee has current ticket');
-      alert('No puedes detener mientras tienes un ticket en atención. Finaliza el ticket primero.');
+      alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
       return;
     }
 
@@ -92,19 +95,19 @@ export default function EmployeeHeader({
     isClickInProgressRef.current = true;
     lastClickTimeRef.current = now;
 
-    console.log('🚀 EXECUTING TOGGLE AVAILABILITY', {
+    console.log('🚀 EXECUTING TOGGLE PAUSE', {
       currentState: buttonState,
       timestamp: new Date().toISOString()
     });
 
     try {
       // CRITICAL: Execute the toggle function
-      await onToggleAvailability();
+      await onTogglePause();
       
-      console.log('✅ TOGGLE AVAILABILITY COMPLETED SUCCESSFULLY');
+      console.log('✅ TOGGLE PAUSE COMPLETED SUCCESSFULLY');
       
     } catch (error) {
-      console.error('❌ TOGGLE AVAILABILITY ERROR:', error);
+      console.error('❌ TOGGLE PAUSE ERROR:', error);
       
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       alert(`Error: ${errorMessage}`);
@@ -114,11 +117,11 @@ export default function EmployeeHeader({
       setTimeout(() => {
         isClickInProgressRef.current = false;
         console.log('🔓 HEADER: Click protection reset');
-      }, 1500);
+      }, 1500); // Increased delay to prevent rapid clicks
     }
-  }, [onToggleAvailability, hasCurrentTicket, isConnected, buttonState]);
+  }, [onTogglePause, hasCurrentTicket, isConnected, buttonState]);
 
-  // CRITICAL: Memoize button styling to prevent re-calculations
+  // CRITICAL FIX: Memoize button styling to prevent re-calculations
   const buttonStyling = useMemo(() => {
     const baseClasses = "flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden";
     
@@ -126,14 +129,14 @@ export default function EmployeeHeader({
       return `${baseClasses} bg-gray-300 text-gray-500 cursor-not-allowed opacity-50`;
     }
     
-    if (buttonState.shouldShowStart) {
+    if (buttonState.shouldShowResume) {
       return `${baseClasses} bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl`;
     } else {
-      return `${baseClasses} bg-red-500 hover:bg-red-600 active:bg-red-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl`;
+      return `${baseClasses} bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl`;
     }
-  }, [buttonState.isDisabled, buttonState.shouldShowStart]);
+  }, [buttonState.isDisabled, buttonState.shouldShowResume]);
 
-  // CRITICAL: Memoize button content to prevent re-renders
+  // CRITICAL FIX: Memoize button content to prevent re-renders
   const buttonContent = useMemo(() => {
     if (isClickInProgressRef.current) {
       return (
@@ -144,43 +147,44 @@ export default function EmployeeHeader({
       );
     }
     
-    if (buttonState.shouldShowStart) {
+    if (buttonState.shouldShowResume) {
       return (
         <>
           <Play size={20} className={!hasCurrentTicket && isConnected ? "animate-pulse" : ""} />
-          <span>Iniciar</span>
+          <span>Reanudar</span>
         </>
       );
     } else {
       return (
         <>
-          <Square size={20} />
-          <span>Detener</span>
+          <Pause size={20} />
+          <span>Pausar</span>
         </>
       );
     }
-  }, [buttonState.shouldShowStart, hasCurrentTicket, isConnected]);
+  }, [buttonState.shouldShowResume, hasCurrentTicket, isConnected]);
 
-  // CRITICAL: Memoize button title to prevent re-calculations
+  // CRITICAL FIX: Memoize button title to prevent re-calculations
   const buttonTitle = useMemo(() => {
     if (!isConnected) return 'Sin conexión a Firebase';
-    if (hasCurrentTicket) return 'No se puede detener con ticket activo';
+    if (hasCurrentTicket) return 'No se puede pausar con ticket activo';
     if (isClickInProgressRef.current) return 'Procesando...';
-    if (buttonState.shouldShowStart) return 'Iniciar disponibilidad para atender tickets';
-    return 'Detener disponibilidad para atender tickets';
-  }, [isConnected, hasCurrentTicket, buttonState.shouldShowStart]);
+    if (buttonState.shouldShowResume) return 'Reanudar y buscar tickets disponibles';
+    return 'Pausar atención';
+  }, [isConnected, hasCurrentTicket, buttonState.shouldShowResume]);
 
-  // CRITICAL: Debug state for validation
+  // CRITICAL NEW: Debug state for validation
   const debugState = useMemo(() => {
     return {
       dbIsActive: currentEmployee.isActive,
       dbIsPaused: currentEmployee.isPaused,
+      propIsPaused: isPaused,
       hasTicket: hasCurrentTicket,
-      buttonAction: buttonState.shouldShowStart ? 'START' : 'STOP',
+      buttonAction: buttonState.shouldShowResume ? 'RESUME' : 'PAUSE',
       isConsistent: currentEmployee.isActive === !currentEmployee.isPaused,
       timestamp: new Date().toLocaleTimeString()
     };
-  }, [currentEmployee.isActive, currentEmployee.isPaused, hasCurrentTicket, buttonState.shouldShowStart]);
+  }, [currentEmployee.isActive, currentEmployee.isPaused, isPaused, hasCurrentTicket, buttonState.shouldShowResume]);
 
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
@@ -203,7 +207,7 @@ export default function EmployeeHeader({
               {new Date().toLocaleTimeString()}
             </div>
             
-            {/* CRITICAL: DEBUG STATE LABEL - TEMPORARY FOR VALIDATION */}
+            {/* CRITICAL NEW: DEBUG STATE LABEL - TEMPORARY FOR VALIDATION */}
             <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg px-3 py-2 shadow-md">
               <div className="flex items-center space-x-2 mb-1">
                 <Bug size={16} className="text-yellow-600" />
@@ -224,7 +228,7 @@ export default function EmployeeHeader({
                 </div>
                 <div className="flex justify-between space-x-2">
                   <span className="text-yellow-700">Botón:</span>
-                  <span className={`font-bold ${debugState.buttonAction === 'START' ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={`font-bold ${debugState.buttonAction === 'RESUME' ? 'text-green-600' : 'text-orange-600'}`}>
                     {debugState.buttonAction}
                   </span>
                 </div>
@@ -257,9 +261,9 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* CRITICAL: New Start/Stop Button */}
+            {/* CRITICAL FIX: Optimized button with memoized properties */}
             <button
-              onClick={handleToggleAvailabilityClick}
+              onClick={handleTogglePauseClick}
               disabled={buttonState.isDisabled}
               className={buttonStyling}
               title={buttonTitle}
