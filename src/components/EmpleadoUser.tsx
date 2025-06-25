@@ -5,6 +5,7 @@ import CurrentTicketCard from './employee/CurrentTicketCard';
 import QueueList from './employee/QueueList';
 import QueueStatusCard from './employee/QueueStatusCard';
 import EmployeeProfile from './employee/EmployeeProfile';
+import ManualTicketRecall from './employee/ManualTicketRecall';
 import EnhancedDeriveTicketModal from './employee/EnhancedDeriveTicketModal';
 import CancelTicketModal from './employee/CancelTicketModal';
 import PasswordChangeModal from './employee/PasswordChangeModal';
@@ -103,6 +104,11 @@ export default function EmpleadoUser() {
     }
   };
 
+  const handleManualTicketRecalled = (ticket: any) => {
+    console.log(`✅ Manual recall successful for ticket #${ticket.number}`);
+    // El estado se actualizará automáticamente a través de los listeners en tiempo real
+  };
+
   const tabs = [
     { id: 'queue', name: 'Cola de Tickets', icon: 'Clock' },
     { id: 'profile', name: 'Mi Perfil', icon: 'User' },
@@ -194,6 +200,12 @@ export default function EmpleadoUser() {
                 personalQueueCount={queueStats.personalQueueCount}
                 generalQueueCount={queueStats.generalQueueCount}
                 nextTicketType={queueStats.nextTicketType}
+              />
+
+              {/* NEW: Manual Ticket Recall Component */}
+              <ManualTicketRecall
+                currentEmployeeId={currentEmployee.id}
+                onTicketRecalled={handleManualTicketRecalled}
               />
             </div>
 

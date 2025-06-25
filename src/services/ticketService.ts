@@ -46,6 +46,14 @@ const convertFirestoreTicket = (doc: any): Ticket => {
     totalTime: data.totalTime || undefined,
     cancellationReason: data.cancellationReason || undefined,
     cancellationComment: data.cancellationComment || undefined,
+    // Enhanced derivation fields
+    derivedFrom: data.derivedFrom || undefined,
+    derivedTo: data.derivedTo || undefined,
+    derivedAt: data.derivedAt ? timestampToDate(data.derivedAt) : undefined,
+    derivationReason: data.derivationReason || undefined,
+    queueType: data.queueType || undefined,
+    assignedToEmployee: data.assignedToEmployee || undefined,
+    priority: data.priority || 'normal',
   };
 };
 
@@ -99,6 +107,8 @@ export const ticketService = {
         serviceSubtype: serviceSubtype || null,
         status: 'waiting',
         queuePosition,
+        priority: 'normal',
+        queueType: 'general',
         createdAt: Timestamp.fromDate(new Date()),
         servedAt: null,
         completedAt: null,
@@ -110,6 +120,11 @@ export const ticketService = {
         totalTime: null,
         cancellationReason: null,
         cancellationComment: null,
+        derivedFrom: null,
+        derivedTo: null,
+        derivedAt: null,
+        derivationReason: null,
+        assignedToEmployee: null,
       };
       
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
@@ -121,6 +136,8 @@ export const ticketService = {
         serviceSubtype,
         status: 'waiting',
         queuePosition,
+        priority: 'normal',
+        queueType: 'general',
         createdAt: new Date(),
       };
     } catch (error) {
@@ -159,6 +176,28 @@ export const ticketService = {
     }
   },
 
+  // NEW: Find ticket by number (for manual recall)
+  async findTicketByNumber(ticketNumber: number): Promise<Ticket | null> {
+    try {
+      const q = query(
+        collection(db, 'tickets'),
+        where('number', '==', ticketNumber),
+        limit(1)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        return null;
+      }
+      
+      return convertFirestoreTicket(querySnapshot.docs[0]);
+    } catch (error) {
+      console.error('Error finding ticket by number:', error);
+      return null;
+    }
+  },
+
   // Subscribe to ticket changes (real-time)
   subscribeToTickets(callback: (tickets: Ticket[]) => void): () => void {
     const q = query(collection(db, 'tickets'), orderBy('createdAt', 'desc'));
@@ -171,7 +210,7 @@ export const ticketService = {
     });
   },
 
-  // Update ticket
+  // ENHANCED: Update ticket with better field handling
   async updateTicket(ticketId: string, updates: Partial<Ticket>): Promise<void> {
     try {
       const ticketRef = doc(db, 'tickets', ticketId);
@@ -181,6 +220,7 @@ export const ticketService = {
       if (updateData.servedAt) updateData.servedAt = Timestamp.fromDate(updateData.servedAt);
       if (updateData.completedAt) updateData.completedAt = Timestamp.fromDate(updateData.completedAt);
       if (updateData.cancelledAt) updateData.cancelledAt = Timestamp.fromDate(updateData.cancelledAt);
+      if (updateData.derivedAt) updateData.derivedAt = Timestamp.fromDate(updateData.derivedAt);
       
       // Convert undefined values to null for Firestore compatibility
       Object.keys(updateData).forEach(key => {
@@ -188,6 +228,11 @@ export const ticketService = {
           updateData[key] = null;
         }
       });
+      
+      // CRITICAL: Log the update for manual recall tracking
+      if (updates.status === 'being_served' && updates.servedAt) {
+        console.log(`🎫 TICKET UPDATE: Ticket ${ticketId} set to being_served with servedAt:`, updates.servedAt);
+      }
       
       await updateDoc(ticketRef, updateData);
     } catch (error) {
