@@ -198,31 +198,60 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // CRITICAL FIX: Enhanced toggle pause that ALWAYS works regardless of ticket availability
+  // CRITICAL FIX: COMPLETELY REWRITTEN toggle pause function with comprehensive debugging
   const handleTogglePause = async () => {
+    console.log('🔄 TOGGLE PAUSE HOOK: Function called');
+    
     if (!currentEmployee) {
       console.error('❌ TOGGLE PAUSE: No current employee found');
+      alert('Error: No se encontró información del empleado');
       return;
     }
 
+    console.log('👤 TOGGLE PAUSE: Employee found', {
+      id: currentEmployee.id,
+      name: currentEmployee.name,
+      currentPauseState: currentEmployee.isPaused,
+      hasCurrentTicket: !!currentTicket,
+      currentTicketId: currentEmployee.currentTicketId
+    });
+
     // CRITICAL: Only check for current ticket, not for waiting tickets
     if (currentTicket) {
+      console.log('🚫 TOGGLE PAUSE: Blocked due to current ticket');
       alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
       return;
     }
     
     setIsLoading(true);
+    
     try {
       const newPauseState = !currentEmployee.isPaused;
       
-      console.log(`🔄 TOGGLE PAUSE: Employee ${currentEmployee.name} changing pause state from ${currentEmployee.isPaused} to ${newPauseState}`);
-      console.log(`📊 CONTEXT: Current ticket: ${currentTicket ? 'YES' : 'NO'}, Waiting tickets: ${waitingTickets.length}, Is loading: ${isLoading}`);
-      
-      // CRITICAL FIX: Update employee pause state IMMEDIATELY - NO CONDITIONS
-      await employeeService.updateEmployee(employeeId, {
-        ...currentEmployee,
-        isPaused: newPauseState
+      console.log(`🔄 TOGGLE PAUSE: Changing pause state`, {
+        from: currentEmployee.isPaused,
+        to: newPauseState,
+        action: newPauseState ? 'PAUSING' : 'RESUMING'
       });
+      
+      // CRITICAL FIX: Update employee pause state with comprehensive data
+      const updateData = {
+        ...currentEmployee,
+        isPaused: newPauseState,
+        // Ensure other fields are preserved
+        currentTicketId: currentEmployee.currentTicketId || undefined,
+        totalTicketsServed: currentEmployee.totalTicketsServed || 0,
+        totalTicketsCancelled: currentEmployee.totalTicketsCancelled || 0,
+        isActive: currentEmployee.isActive,
+        name: currentEmployee.name,
+        position: currentEmployee.position,
+        userId: currentEmployee.userId,
+        createdAt: currentEmployee.createdAt
+      };
+
+      console.log('💾 TOGGLE PAUSE: Updating employee with data:', updateData);
+
+      await employeeService.updateEmployee(employeeId, updateData);
 
       console.log(`✅ TOGGLE PAUSE: Employee pause state updated successfully to ${newPauseState}`);
 
@@ -234,6 +263,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
         // Try to auto-assign if there are tickets available
         setTimeout(async () => {
           try {
+            console.log('🤖 RESUME: Attempting auto-assignment...');
             const assignedTicket = await autoAssignNextTicket(employeeId);
             if (assignedTicket) {
               console.log(`✅ RESUME: Auto-assigned ticket ${assignedTicket.number} to ${currentEmployee.name}`);
@@ -251,11 +281,15 @@ export function useEmployeeTicketManagement(employeeId: string) {
       
     } catch (error) {
       console.error('❌ TOGGLE PAUSE ERROR:', error);
-      alert('Error al cambiar estado de pausa');
+      alert('Error al cambiar estado de pausa: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     } finally {
       setIsLoading(false);
+      console.log('🔓 TOGGLE PAUSE: Loading state cleared');
     }
   };
+
+  // CRITICAL DEBUG: Log the function being returned
+  console.log('🔧 HOOK RETURN: handleTogglePause function type:', typeof handleTogglePause);
 
   return {
     currentTicket,
@@ -265,7 +299,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     handleCancelTicket,
     handleDeriveTicket,
     handleRecallTicket,
-    handleTogglePause,
+    handleTogglePause, // CRITICAL: Ensure this function is properly returned
     isLoading
   };
 }

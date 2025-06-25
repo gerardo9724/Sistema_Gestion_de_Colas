@@ -22,15 +22,54 @@ export default function EmployeeHeader({
   onTogglePause
 }: EmployeeHeaderProps) {
   
-  // CRITICAL FIX: Log the current state for debugging
-  console.log('🔍 EMPLOYEE HEADER STATE:', {
+  // CRITICAL DEBUG: Log the current state and function availability
+  console.log('🔍 EMPLOYEE HEADER DEBUG:', {
     employeeName: currentEmployee.name,
     isPaused,
     hasCurrentTicket,
     currentTicketId: currentEmployee.currentTicketId,
+    onTogglePauseType: typeof onTogglePause,
+    onTogglePauseExists: !!onTogglePause,
     buttonShouldBeDisabled: hasCurrentTicket,
     buttonShouldWork: !hasCurrentTicket
   });
+
+  // CRITICAL FIX: Enhanced click handler with comprehensive logging
+  const handleTogglePauseClick = async () => {
+    console.log('🔘 HEADER BUTTON CLICKED:', {
+      action: isPaused ? 'RESUME' : 'PAUSE',
+      currentState: isPaused ? 'PAUSED' : 'ACTIVE',
+      hasCurrentTicket,
+      willExecute: !hasCurrentTicket,
+      functionAvailable: typeof onTogglePause === 'function'
+    });
+
+    // CRITICAL: Validate function exists before calling
+    if (typeof onTogglePause !== 'function') {
+      console.error('❌ CRITICAL ERROR: onTogglePause is not a function!', {
+        type: typeof onTogglePause,
+        value: onTogglePause
+      });
+      alert('Error: Función de pausa no disponible');
+      return;
+    }
+
+    // CRITICAL: Check if action should be blocked
+    if (hasCurrentTicket) {
+      console.log('🚫 ACTION BLOCKED: Employee has current ticket');
+      alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
+      return;
+    }
+
+    try {
+      console.log('🚀 EXECUTING TOGGLE PAUSE...');
+      await onTogglePause();
+      console.log('✅ TOGGLE PAUSE EXECUTED SUCCESSFULLY');
+    } catch (error) {
+      console.error('❌ TOGGLE PAUSE ERROR:', error);
+      alert('Error al cambiar estado de pausa');
+    }
+  };
 
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
@@ -70,17 +109,9 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* CRITICAL FIX: Resume/Pause Button - ONLY disable when has current ticket */}
+            {/* CRITICAL FIX: Resume/Pause Button with enhanced click handler */}
             <button
-              onClick={() => {
-                console.log('🔘 BUTTON CLICKED:', {
-                  action: isPaused ? 'RESUME' : 'PAUSE',
-                  currentState: isPaused ? 'PAUSED' : 'ACTIVE',
-                  hasCurrentTicket,
-                  willExecute: !hasCurrentTicket
-                });
-                onTogglePause();
-              }}
+              onClick={handleTogglePauseClick}
               disabled={hasCurrentTicket} // CRITICAL: ONLY disable when has current ticket
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform ${
                 hasCurrentTicket 

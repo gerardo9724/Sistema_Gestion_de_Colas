@@ -25,6 +25,21 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
 
+  // CRITICAL DEBUG: Log the current employee state
+  console.log('👤 EMPLEADO USER: Current employee state', {
+    currentEmployee: currentEmployee ? {
+      id: currentEmployee.id,
+      name: currentEmployee.name,
+      isPaused: currentEmployee.isPaused,
+      currentTicketId: currentEmployee.currentTicketId
+    } : null,
+    currentUser: currentUser ? {
+      id: currentUser.id,
+      name: currentUser.name,
+      type: currentUser.type
+    } : null
+  });
+
   // Custom hooks for modular functionality
   const {
     currentTicket,
@@ -34,9 +49,16 @@ export default function EmpleadoUser() {
     handleCancelTicket,
     handleDeriveTicket,
     handleRecallTicket,
-    handleTogglePause,
+    handleTogglePause, // CRITICAL: Get the function from the hook
     isLoading
   } = useEmployeeTicketManagement(currentEmployee?.id || '');
+
+  // CRITICAL DEBUG: Verify the toggle pause function
+  console.log('🔧 EMPLEADO USER: Toggle pause function verification', {
+    handleTogglePauseType: typeof handleTogglePause,
+    handleTogglePauseExists: !!handleTogglePause,
+    isFunction: typeof handleTogglePause === 'function'
+  });
 
   const {
     elapsedTime,
@@ -51,6 +73,7 @@ export default function EmpleadoUser() {
     const initializeEmployeePauseState = async () => {
       if (currentEmployee && !currentEmployee.isPaused && !currentEmployee.currentTicketId) {
         try {
+          console.log('🔄 INITIAL PAUSE: Setting employee to paused state on login');
           await handleTogglePause();
         } catch (error) {
           console.error('Error setting initial pause state:', error);
@@ -58,8 +81,11 @@ export default function EmpleadoUser() {
       }
     };
 
-    initializeEmployeePauseState();
-  }, [currentEmployee?.id]);
+    // Only run if we have the toggle function available
+    if (typeof handleTogglePause === 'function') {
+      initializeEmployeePauseState();
+    }
+  }, [currentEmployee?.id, handleTogglePause]);
 
   const handleLogout = () => {
     dispatch({ type: 'LOGOUT' });
@@ -109,6 +135,29 @@ export default function EmpleadoUser() {
     // El estado se actualizará automáticamente a través de los listeners en tiempo real
   };
 
+  // CRITICAL FIX: Enhanced toggle pause wrapper with comprehensive logging
+  const handleTogglePauseWrapper = async () => {
+    console.log('🔘 EMPLEADO USER: Toggle pause wrapper called');
+    
+    if (typeof handleTogglePause !== 'function') {
+      console.error('❌ CRITICAL ERROR: handleTogglePause is not a function in wrapper!', {
+        type: typeof handleTogglePause,
+        value: handleTogglePause
+      });
+      alert('Error crítico: Función de pausa no disponible');
+      return;
+    }
+
+    try {
+      console.log('🚀 EMPLEADO USER: Calling handleTogglePause...');
+      await handleTogglePause();
+      console.log('✅ EMPLEADO USER: handleTogglePause completed successfully');
+    } catch (error) {
+      console.error('❌ EMPLEADO USER: Error in toggle pause wrapper:', error);
+      alert('Error al cambiar estado de pausa');
+    }
+  };
+
   const tabs = [
     { id: 'queue', name: 'Cola de Tickets', icon: 'Clock' },
     { id: 'profile', name: 'Mi Perfil', icon: 'User' },
@@ -138,7 +187,6 @@ export default function EmpleadoUser() {
     );
   }
 
-  // CRITICAL FIX: Pass correct props to EmployeeHeader
   const renderContent = () => {
     switch (activeTab) {
       case 'queue':
@@ -237,7 +285,7 @@ export default function EmpleadoUser() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
-      {/* CRITICAL FIX: Pass hasCurrentTicket correctly */}
+      {/* CRITICAL FIX: Pass the wrapper function to EmployeeHeader */}
       <EmployeeHeader
         currentUser={currentUser}
         currentEmployee={currentEmployee}
@@ -245,7 +293,7 @@ export default function EmpleadoUser() {
         isPaused={currentEmployee.isPaused}
         hasCurrentTicket={!!currentTicket} // CRITICAL: Convert to boolean properly
         onLogout={handleLogout}
-        onTogglePause={handleTogglePause}
+        onTogglePause={handleTogglePauseWrapper} // CRITICAL: Pass the wrapper function
       />
 
       <div className="max-w-7xl mx-auto px-6 py-8">
