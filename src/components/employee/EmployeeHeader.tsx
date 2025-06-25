@@ -84,9 +84,18 @@ export default function EmployeeHeader({
     }
   }, [onTogglePause, hasCurrentTicket, isConnected]);
 
-  // CRITICAL FIX: Use isActive to determine button state instead of isPaused
+  // CRITICAL FIX: Use currentEmployee.isActive directly from props for real-time updates
   const isEmployeeActive = currentEmployee.isActive;
   const isEmployeePaused = currentEmployee.isPaused;
+
+  console.log('🎨 HEADER RENDER: Button state', {
+    employeeId: currentEmployee.id,
+    employeeName: currentEmployee.name,
+    isActive: isEmployeeActive,
+    isPaused: isEmployeePaused,
+    hasCurrentTicket,
+    buttonShouldShow: isEmployeeActive ? 'PAUSE' : 'RESUME'
+  });
 
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
@@ -126,7 +135,7 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* CRITICAL FIX: Button state based on isActive property */}
+            {/* CRITICAL FIX: Button state based on isActive property with real-time updates */}
             <button
               onClick={handleTogglePauseClick}
               disabled={hasCurrentTicket || !isConnected}

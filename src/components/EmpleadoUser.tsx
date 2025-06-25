@@ -12,6 +12,7 @@ import PasswordChangeModal from './employee/PasswordChangeModal';
 import { useEmployeeTicketManagement } from '../hooks/useEmployeeTicketManagement';
 import { useEmployeeTimer } from '../hooks/useEmployeeTimer';
 import { useEmployeeQueueStats } from '../hooks/useEmployeeQueueStats';
+import { employeeService } from '../services/employeeService';
 
 type TabType = 'queue' | 'profile';
 
@@ -25,8 +26,8 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
 
-  // CRITICAL FIX: Remove initialization tracking to simplify logic
-  const [initializationComplete, setInitializationComplete] = useState(false);
+  // CRITICAL FIX: Auto-activate employee on login
+  const [hasAutoActivated, setHasAutoActivated] = useState(false);
 
   // Custom hooks for modular functionality
   const {
@@ -49,35 +50,38 @@ export default function EmpleadoUser() {
 
   const queueStats = useEmployeeQueueStats(currentEmployee?.id || '');
 
-  // CRITICAL FIX: Simplified initialization logic with proper isActive/isPaused handling
+  // CRITICAL FIX: Auto-activate employee when they log in
   useEffect(() => {
-    // Only run once when component mounts and employee is available
-    if (currentEmployee && !initializationComplete) {
-      console.log('🔄 EMPLOYEE INITIALIZATION: Setting initial state', {
-        currentIsActive: currentEmployee.isActive,
-        currentIsPaused: currentEmployee.isPaused,
-        hasCurrentTicket: !!currentEmployee.currentTicketId
-      });
-      
-      // Mark initialization as complete to prevent repeated execution
-      setInitializationComplete(true);
-      
-      // CRITICAL FIX: Check if employee needs to be set to inactive/paused state
-      // Only auto-pause if employee is active but has no current ticket
-      if (currentEmployee.isActive && !currentEmployee.currentTicketId) {
-        console.log('⏸️ EMPLOYEE INITIALIZATION: Auto-pausing employee on login (isActive: false, isPaused: true)');
-        
-        // Use a timeout to ensure all hooks are properly initialized
-        setTimeout(() => {
-          handleTogglePause().catch(error => {
-            console.error('❌ EMPLOYEE INITIALIZATION ERROR:', error);
+    const autoActivateEmployee = async () => {
+      if (currentEmployee && !hasAutoActivated && state.isFirebaseConnected) {
+        console.log('🚀 AUTO-ACTIVATE: Employee login detected, activating employee', {
+          employeeId: currentEmployee.id,
+          employeeName: currentEmployee.name,
+          currentIsActive: currentEmployee.isActive,
+          currentIsPaused: currentEmployee.isPaused
+        });
+
+        try {
+          // CRITICAL: Set employee to active state on login
+          await employeeService.updateEmployee(currentEmployee.id, {
+            isActive: true,    // CRITICAL: Employee becomes active on login
+            isPaused: false    // CRITICAL: Employee is not paused on login
           });
-        }, 1000);
-      } else {
-        console.log('✅ EMPLOYEE INITIALIZATION: No auto-pause needed, employee already in correct state');
+
+          setHasAutoActivated(true);
+          console.log('✅ AUTO-ACTIVATE: Employee activated successfully on login');
+
+        } catch (error) {
+          console.error('❌ AUTO-ACTIVATE ERROR:', error);
+        }
       }
+    };
+
+    // Only run once when employee is available and connected
+    if (currentEmployee && state.isFirebaseConnected && !hasAutoActivated) {
+      autoActivateEmployee();
     }
-  }, [currentEmployee, handleTogglePause, initializationComplete]);
+  }, [currentEmployee, state.isFirebaseConnected, hasAutoActivated]);
 
   const handleLogout = () => {
     dispatch({ type: 'LOGOUT' });
