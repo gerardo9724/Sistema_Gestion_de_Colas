@@ -198,7 +198,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // ENHANCED: Toggle pause with improved auto-assignment logic
+  // CRITICAL FIX: Enhanced toggle pause with immediate activation
   const handleTogglePause = async () => {
     if (!currentEmployee) return;
 
@@ -213,27 +213,32 @@ export function useEmployeeTicketManagement(employeeId: string) {
       
       console.log(`🔄 TOGGLE PAUSE: Employee ${currentEmployee.name} changing pause state from ${currentEmployee.isPaused} to ${newPauseState}`);
       
-      // Update employee pause state
+      // CRITICAL FIX: Update employee pause state IMMEDIATELY
       await employeeService.updateEmployee(employeeId, {
         ...currentEmployee,
         isPaused: newPauseState
       });
 
-      // CRITICAL FIX: If resuming (unpausing), try to auto-assign next ticket
+      // CRITICAL FIX: If resuming (unpausing), employee becomes ACTIVE immediately
       if (currentEmployee.isPaused && !newPauseState) {
-        console.log('🎯 RESUME: Employee resuming, checking for available tickets...');
+        console.log('🎯 RESUME: Employee resuming and becoming ACTIVE immediately');
         
-        // Wait a moment for the employee state to update, then try auto-assignment
+        // IMPORTANT: Employee is now ACTIVE and ready to receive tickets
+        // No need to wait - the auto-assignment will happen when tickets arrive
+        // or when the employee manually takes a ticket
+        
+        // Try to auto-assign if there are tickets available
         setTimeout(async () => {
           try {
             const assignedTicket = await autoAssignNextTicket(employeeId);
             if (assignedTicket) {
               console.log(`✅ RESUME: Auto-assigned ticket ${assignedTicket.number} to ${currentEmployee.name}`);
             } else {
-              console.log('📭 RESUME: No tickets available for auto-assignment');
+              console.log('📭 RESUME: No tickets available, but employee is now ACTIVE and ready');
             }
           } catch (error) {
             console.error('❌ RESUME ERROR: Failed to auto-assign ticket:', error);
+            // Employee is still active even if auto-assignment fails
           }
         }, 500);
       }

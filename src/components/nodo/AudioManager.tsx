@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { Ticket, Employee } from '../../types';
 
 interface AudioManagerProps {
@@ -27,44 +27,56 @@ export default function AudioManager({
   highlightDuration
 }: AudioManagerProps) {
 
-  // FIXED: Monitor for ticket calls - ALLOW MULTIPLE CALLS FOR SAME TICKET
+  // CRITICAL FIX: Use ref to track the last processed servedAt timestamp
+  const lastProcessedTimestamp = useRef<number>(0);
+  const isProcessingAnnouncement = useRef<boolean>(false);
+
+  // FIXED: Monitor for ticket calls with proper duplicate prevention
   useEffect(() => {
-    if (!audioEnabled) return;
+    if (!audioEnabled || isProcessingAnnouncement.current) return;
 
     const beingServedTickets = tickets.filter(t => t.status === 'being_served');
     
-    // CRITICAL FIX: Find tickets with updated servedAt time (including recalls)
+    // CRITICAL FIX: Find tickets with NEW servedAt time (not just recent)
     const ticketToAnnounce = beingServedTickets.find(ticket => {
       if (!ticket.servedAt) return false;
       
-      // FIXED: Check if servedAt was updated in the last 3 seconds (allows for recalls)
-      const timeSinceServed = new Date().getTime() - new Date(ticket.servedAt).getTime();
-      const isRecentlyUpdated = timeSinceServed < 3000; // 3 seconds window
+      const servedAtTimestamp = new Date(ticket.servedAt).getTime();
       
-      console.log('🔍 Checking ticket for announcement:', {
+      // CRITICAL: Only process if this is a NEW timestamp we haven't seen before
+      const isNewTimestamp = servedAtTimestamp > lastProcessedTimestamp.current;
+      
+      console.log('🔍 AUDIO CHECK: Checking ticket for announcement', {
         ticketId: ticket.id,
         ticketNumber: ticket.number,
         servedAt: ticket.servedAt,
-        timeSinceServed,
-        isRecentlyUpdated,
-        lastAnnounced: lastAnnouncedTicket
+        servedAtTimestamp,
+        lastProcessedTimestamp: lastProcessedTimestamp.current,
+        isNewTimestamp,
+        timeDifference: servedAtTimestamp - lastProcessedTimestamp.current
       });
       
-      return isRecentlyUpdated;
+      return isNewTimestamp;
     });
 
     if (ticketToAnnounce) {
       const employee = employees.find(emp => emp.id === ticketToAnnounce.servedBy);
       
       if (employee) {
-        console.log('🔊 TICKET CALL DETECTED - ANNOUNCEMENT TRIGGERED:', {
+        // CRITICAL FIX: Prevent multiple simultaneous announcements
+        isProcessingAnnouncement.current = true;
+        
+        // Update the last processed timestamp IMMEDIATELY
+        lastProcessedTimestamp.current = new Date(ticketToAnnounce.servedAt!).getTime();
+        
+        console.log('🔊 AUDIO ANNOUNCEMENT TRIGGERED:', {
           ticketNumber: ticketToAnnounce.number,
           employeeName: employee.name,
           servedAt: ticketToAnnounce.servedAt,
-          isRecall: ticketToAnnounce.id === lastAnnouncedTicket ? 'YES - RECALL' : 'NO - NEW CALL'
+          newTimestamp: lastProcessedTimestamp.current
         });
 
-        // FIXED: Always update the announced ticket ID (allows for tracking but doesn't prevent recalls)
+        // Update the announced ticket ID for tracking
         onTicketAnnounced(ticketToAnnounce.id);
         
         // Highlight the ticket IMMEDIATELY
@@ -76,6 +88,12 @@ export default function AudioManager({
         // Announce after 800ms
         setTimeout(() => {
           announceTicket(ticketToAnnounce.number, employee.name);
+          
+          // CRITICAL: Reset processing flag after announcement starts
+          setTimeout(() => {
+            isProcessingAnnouncement.current = false;
+            console.log('🔓 AUDIO: Processing flag reset, ready for next announcement');
+          }, 1000);
         }, 800);
         
         // Remove highlight after configured duration
@@ -84,7 +102,7 @@ export default function AudioManager({
         }, highlightDuration);
       }
     }
-  }, [tickets, audioEnabled, highlightDuration, lastAnnouncedTicket, employees, onTicketAnnounced, onTicketHighlighted]);
+  }, [tickets, audioEnabled, highlightDuration, employees, onTicketAnnounced, onTicketHighlighted]);
 
   const playNotificationSound = () => {
     try {
@@ -184,7 +202,7 @@ export default function AudioManager({
           utterance.pitch = 0.9;
           utterance.volume = audioVolume;
           
-          console.log('🔊 PLAYING AUDIO ANNOUNCEMENT:', text);
+          console.log('🔊 PLAYING SINGLE AUDIO ANNOUNCEMENT:', text);
           speechSynthesis.speak(utterance);
         };
 
