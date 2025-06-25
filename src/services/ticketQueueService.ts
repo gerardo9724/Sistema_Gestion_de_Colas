@@ -181,10 +181,30 @@ export const ticketQueueService = {
     }
   },
 
-  // ENHANCED: Auto-assign new ticket to best available employee
+  // CRITICAL FIX: Enhanced auto-assign for new tickets with proper validation
   async autoAssignNewTicket(ticketId: string): Promise<boolean> {
     try {
       console.log('🚀 AUTO-ASSIGN NEW TICKET: Starting workload-based assignment for ticket', ticketId);
+
+      // Get the ticket first to validate it exists and is eligible
+      const allTickets = await ticketService.getAllTickets();
+      const ticket = allTickets.find(t => t.id === ticketId);
+      
+      if (!ticket) {
+        console.log('❌ AUTO-ASSIGN: Ticket not found');
+        return false;
+      }
+
+      // CRITICAL: Only assign tickets that are waiting and in general queue
+      if (ticket.status !== 'waiting') {
+        console.log('📋 AUTO-ASSIGN: Ticket is not in waiting status, skipping assignment');
+        return false;
+      }
+
+      if (ticket.queueType === 'personal' && ticket.assignedToEmployee) {
+        console.log('👤 AUTO-ASSIGN: Ticket is in personal queue, skipping general assignment');
+        return false;
+      }
 
       // Find the best available employee
       const bestEmployee = await this.findBestAvailableEmployee();
@@ -194,26 +214,17 @@ export const ticketQueueService = {
         return false;
       }
 
-      console.log(`🎯 AUTO-ASSIGN: Assigning ticket ${ticketId} to ${bestEmployee.name}`);
-
-      // Get the ticket to calculate wait time
-      const allTickets = await ticketService.getAllTickets();
-      const ticket = allTickets.find(t => t.id === ticketId);
-      
-      if (!ticket) {
-        console.log('❌ AUTO-ASSIGN: Ticket not found');
-        return false;
-      }
+      console.log(`🎯 AUTO-ASSIGN: Assigning ticket ${ticket.number} to ${bestEmployee.name}`);
 
       // Calculate wait time
       const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
       const now = new Date();
       
-      // Assign ticket to the best employee
+      // CRITICAL FIX: Assign ticket to the best employee with proper audio trigger
       await ticketService.updateTicket(ticketId, {
         status: 'being_served',
         servedBy: bestEmployee.id,
-        servedAt: now,
+        servedAt: now, // CRITICAL: This triggers the audio announcement
         waitTime,
         queueType: undefined,
         assignedToEmployee: undefined,

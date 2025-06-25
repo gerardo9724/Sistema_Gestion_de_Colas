@@ -27,11 +27,11 @@ export default function AudioManager({
   highlightDuration
 }: AudioManagerProps) {
 
-  // CRITICAL FIX: Use ref to track the last processed servedAt timestamp
-  const lastProcessedTimestamp = useRef<number>(0);
+  // CRITICAL FIX: Track processed announcements to prevent duplicates
+  const processedAnnouncements = useRef<Set<string>>(new Set());
   const isProcessingAnnouncement = useRef<boolean>(false);
 
-  // CRITICAL FIX: Enhanced employee lookup with multiple validation methods
+  // CRITICAL FIX: Enhanced employee lookup with validation
   const findCorrectEmployee = (ticket: Ticket): Employee | null => {
     console.log('🔍 EMPLOYEE LOOKUP: Finding correct employee for ticket', {
       ticketId: ticket.id,
@@ -40,7 +40,7 @@ export default function AudioManager({
       availableEmployees: employees.length
     });
 
-    // Method 1: Direct lookup by servedBy ID
+    // Method 1: Direct lookup by servedBy ID (most reliable)
     if (ticket.servedBy) {
       const directEmployee = employees.find(emp => emp.id === ticket.servedBy);
       if (directEmployee) {
@@ -69,34 +69,6 @@ export default function AudioManager({
       return employeeWithTicket;
     }
 
-    // Method 3: Find employee who is currently serving and not paused (fallback for race conditions)
-    const activeServingEmployees = employees.filter(emp => 
-      emp.isActive && 
-      !emp.isPaused && 
-      emp.currentTicketId && 
-      emp.currentTicketId !== ''
-    );
-
-    if (activeServingEmployees.length === 1) {
-      console.log('✅ EMPLOYEE FOUND (Active Serving): Using single active employee', {
-        employeeId: activeServingEmployees[0].id,
-        employeeName: activeServingEmployees[0].name,
-        method: 'singleActiveServing'
-      });
-      return activeServingEmployees[0];
-    }
-
-    // Method 4: Last resort - find any active employee (should rarely happen)
-    const anyActiveEmployee = employees.find(emp => emp.isActive && !emp.isPaused);
-    if (anyActiveEmployee) {
-      console.warn('⚠️ EMPLOYEE FALLBACK: Using any active employee as last resort', {
-        employeeId: anyActiveEmployee.id,
-        employeeName: anyActiveEmployee.name,
-        method: 'fallback'
-      });
-      return anyActiveEmployee;
-    }
-
     console.error('❌ EMPLOYEE ERROR: No suitable employee found for ticket', {
       ticketId: ticket.id,
       ticketNumber: ticket.number,
@@ -108,32 +80,38 @@ export default function AudioManager({
     return null;
   };
 
-  // FIXED: Monitor for ticket calls with proper duplicate prevention and enhanced employee lookup
+  // CRITICAL FIX: Monitor for NEW ticket calls only (prevent duplicates and wrong triggers)
   useEffect(() => {
     if (!audioEnabled || isProcessingAnnouncement.current) return;
 
     const beingServedTickets = tickets.filter(t => t.status === 'being_served');
     
-    // CRITICAL FIX: Find tickets with NEW servedAt time (not just recent)
+    // CRITICAL FIX: Only process tickets with NEW servedAt timestamps that haven't been processed
     const ticketToAnnounce = beingServedTickets.find(ticket => {
       if (!ticket.servedAt) return false;
       
-      const servedAtTimestamp = new Date(ticket.servedAt).getTime();
+      // Create unique identifier for this specific call
+      const callIdentifier = `${ticket.id}-${new Date(ticket.servedAt).getTime()}`;
       
-      // CRITICAL: Only process if this is a NEW timestamp we haven't seen before
-      const isNewTimestamp = servedAtTimestamp > lastProcessedTimestamp.current;
+      // CRITICAL: Check if this specific call has already been processed
+      const alreadyProcessed = processedAnnouncements.current.has(callIdentifier);
+      
+      // CRITICAL: Only process if this is a NEW call (within last 3 seconds) AND not already processed
+      const timeSinceServed = new Date().getTime() - new Date(ticket.servedAt).getTime();
+      const isRecentCall = timeSinceServed < 3000; // 3 seconds window
       
       console.log('🔍 AUDIO CHECK: Checking ticket for announcement', {
         ticketId: ticket.id,
         ticketNumber: ticket.number,
         servedAt: ticket.servedAt,
-        servedAtTimestamp,
-        lastProcessedTimestamp: lastProcessedTimestamp.current,
-        isNewTimestamp,
-        timeDifference: servedAtTimestamp - lastProcessedTimestamp.current
+        callIdentifier,
+        alreadyProcessed,
+        timeSinceServed: `${timeSinceServed}ms`,
+        isRecentCall,
+        shouldProcess: isRecentCall && !alreadyProcessed
       });
       
-      return isNewTimestamp;
+      return isRecentCall && !alreadyProcessed;
     });
 
     if (ticketToAnnounce) {
@@ -144,16 +122,17 @@ export default function AudioManager({
         // CRITICAL FIX: Prevent multiple simultaneous announcements
         isProcessingAnnouncement.current = true;
         
-        // Update the last processed timestamp IMMEDIATELY
-        lastProcessedTimestamp.current = new Date(ticketToAnnounce.servedAt!).getTime();
+        // Mark this specific call as processed IMMEDIATELY
+        const callIdentifier = `${ticketToAnnounce.id}-${new Date(ticketToAnnounce.servedAt!).getTime()}`;
+        processedAnnouncements.current.add(callIdentifier);
         
         console.log('🔊 AUDIO ANNOUNCEMENT TRIGGERED:', {
           ticketNumber: ticketToAnnounce.number,
           employeeName: employee.name,
           employeeId: employee.id,
           servedAt: ticketToAnnounce.servedAt,
-          newTimestamp: lastProcessedTimestamp.current,
-          lookupMethod: 'enhanced'
+          callIdentifier,
+          processedCount: processedAnnouncements.current.size
         });
 
         // Update the announced ticket ID for tracking
@@ -180,6 +159,14 @@ export default function AudioManager({
         setTimeout(() => {
           onTicketHighlighted(null);
         }, highlightDuration);
+        
+        // CLEANUP: Remove old processed announcements (keep only last 50)
+        if (processedAnnouncements.current.size > 50) {
+          const oldEntries = Array.from(processedAnnouncements.current).slice(0, 25);
+          oldEntries.forEach(entry => processedAnnouncements.current.delete(entry));
+          console.log('🧹 AUDIO: Cleaned up old processed announcements');
+        }
+        
       } else {
         console.error('❌ AUDIO ERROR: No employee found for ticket announcement', {
           ticketId: ticketToAnnounce.id,
