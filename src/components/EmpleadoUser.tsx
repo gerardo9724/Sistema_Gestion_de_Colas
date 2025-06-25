@@ -304,6 +304,69 @@ export default function EmpleadoUser() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Current Service */}
             <div className="space-y-6">
+              {/* CRITICAL NEW: DEBUG PANEL - TEMPORARY FOR VALIDATION */}
+              <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 shadow-lg">
+                <h3 className="text-lg font-bold text-yellow-800 mb-3 flex items-center space-x-2">
+                  <span>🐛</span>
+                  <span>DEBUG - Estado del Empleado en BD</span>
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-yellow-700 font-medium">isActive (BD):</span>
+                      <span className={`font-bold px-2 py-1 rounded ${
+                        currentEmployee.isActive 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {currentEmployee.isActive ? 'TRUE' : 'FALSE'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-700 font-medium">isPaused (BD):</span>
+                      <span className={`font-bold px-2 py-1 rounded ${
+                        currentEmployee.isPaused 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {currentEmployee.isPaused ? 'TRUE' : 'FALSE'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-yellow-700 font-medium">Ticket Actual:</span>
+                      <span className={`font-bold px-2 py-1 rounded ${
+                        currentEmployee.currentTicketId 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {currentEmployee.currentTicketId ? 'SÍ' : 'NO'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-700 font-medium">Estado Lógico:</span>
+                      <span className={`font-bold px-2 py-1 rounded ${
+                        currentEmployee.isActive === !currentEmployee.isPaused
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {currentEmployee.isActive === !currentEmployee.isPaused ? 'CONSISTENTE' : 'INCONSISTENTE'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 p-2 bg-yellow-100 rounded border border-yellow-300">
+                  <p className="text-xs text-yellow-800">
+                    <strong>Regla:</strong> isActive debe ser opuesto a isPaused. 
+                    Si isActive=true, entonces isPaused=false y viceversa.
+                  </p>
+                </div>
+                <div className="mt-2 text-center text-xs text-yellow-600">
+                  Última actualización: {new Date().toLocaleTimeString()}
+                </div>
+              </div>
+
               {currentTicket ? (
                 <CurrentTicketCard
                   ticket={currentTicket}
