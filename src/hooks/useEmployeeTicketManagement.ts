@@ -11,9 +11,6 @@ export function useEmployeeTicketManagement(employeeId: string) {
   // CRITICAL FIX: Prevent multiple simultaneous toggle operations
   const isToggleInProgressRef = useRef<boolean>(false);
   const lastToggleTimeRef = useRef<number>(0);
-  
-  // CRITICAL NEW: Track if auto-activation has been attempted
-  const autoActivationAttemptedRef = useRef<boolean>(false);
 
   const currentEmployee = state.employees.find(e => e.id === employeeId);
   
@@ -24,47 +21,6 @@ export function useEmployeeTicketManagement(employeeId: string) {
   const waitingTickets = state.tickets
     .filter(ticket => ticket.status === 'waiting')
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-  // CRITICAL NEW: Auto-activate employee on login if not already attempted
-  useEffect(() => {
-    const autoActivateOnLogin = async () => {
-      if (!currentEmployee || !state.isFirebaseConnected || autoActivationAttemptedRef.current) {
-        return;
-      }
-
-      // CRITICAL: Only auto-activate if employee is currently inactive
-      if (!currentEmployee.isActive) {
-        console.log('🚀 AUTO-ACTIVATION ON LOGIN: Employee is inactive, activating...', {
-          employeeId: currentEmployee.id,
-          employeeName: currentEmployee.name,
-          currentIsActive: currentEmployee.isActive,
-          currentIsPaused: currentEmployee.isPaused
-        });
-
-        try {
-          autoActivationAttemptedRef.current = true;
-          
-          await employeeService.updateEmployee(employeeId, {
-            isActive: true,    // CRITICAL: Activate employee on login
-            isPaused: false    // CRITICAL: Unpause employee on login
-          });
-
-          console.log('✅ AUTO-ACTIVATION: Employee activated successfully on login');
-        } catch (error) {
-          console.error('❌ AUTO-ACTIVATION ERROR:', error);
-          autoActivationAttemptedRef.current = false; // Allow retry on error
-        }
-      } else {
-        console.log('✅ AUTO-ACTIVATION: Employee already active, no action needed');
-        autoActivationAttemptedRef.current = true;
-      }
-    };
-
-    // Run auto-activation when employee data is available
-    if (currentEmployee && state.isFirebaseConnected) {
-      autoActivateOnLogin();
-    }
-  }, [currentEmployee?.id, currentEmployee?.isActive, state.isFirebaseConnected, employeeId]);
 
   const handleStartService = async (ticketId: string) => {
     if (!currentEmployee) return;
@@ -239,7 +195,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // CRITICAL FIX: Completely rewritten toggle pause with proper state management
+  // CRITICAL FIX: Heavily optimized toggle pause with strict debouncing
   const handleTogglePause = useCallback(async () => {
     const now = Date.now();
     
@@ -269,7 +225,6 @@ export function useEmployeeTicketManagement(employeeId: string) {
     // CRITICAL: Check for current ticket
     if (currentTicket) {
       console.log('🚫 TOGGLE BLOCKED: Employee has current ticket');
-      alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
       return;
     }
 
@@ -287,9 +242,9 @@ export function useEmployeeTicketManagement(employeeId: string) {
     });
 
     try {
-      // CRITICAL FIX: Simple and clear state toggle logic
+      // CRITICAL FIX: Simple state toggle logic
       const newIsActive = !currentEmployee.isActive;
-      const newIsPaused = !newIsActive; // isPaused is always opposite of isActive
+      const newIsPaused = !newIsActive; // isPaused is opposite of isActive
       
       console.log(`🔄 TOGGLE PAUSE: State transition`, {
         from: { isActive: currentEmployee.isActive, isPaused: currentEmployee.isPaused },
@@ -297,7 +252,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
         action: newIsActive ? 'ACTIVATING/RESUMING' : 'DEACTIVATING/PAUSING'
       });
       
-      // CRITICAL: Update employee state with explicit values
+      // CRITICAL: Update employee state
       await employeeService.updateEmployee(employeeId, {
         isActive: newIsActive,
         isPaused: newIsPaused
@@ -326,7 +281,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
       
     } catch (error) {
       console.error('❌ TOGGLE PAUSE ERROR:', error);
-      alert(`Error al cambiar estado del empleado: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      throw error;
       
     } finally {
       // CRITICAL: Always reset flags with delay
@@ -334,7 +289,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
         setIsLoading(false);
         isToggleInProgressRef.current = false;
         console.log('🔓 TOGGLE PAUSE: All flags reset');
-      }, 1500); // Increased delay to prevent rapid clicks
+      }, 1000);
     }
   }, [currentEmployee, employeeId, currentTicket, autoAssignNextTicket]);
 

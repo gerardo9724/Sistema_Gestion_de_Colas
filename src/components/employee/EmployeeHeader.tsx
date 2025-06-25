@@ -26,35 +26,33 @@ export default function EmployeeHeader({
   const isClickInProgressRef = useRef<boolean>(false);
   const lastClickTimeRef = useRef<number>(0);
 
-  // CRITICAL FIX: Use ONLY database state for button logic (ignore prop isPaused)
+  // CRITICAL FIX: Memoize button state to prevent unnecessary re-calculations
   const buttonState = useMemo(() => {
-    const dbIsActive = currentEmployee.isActive;
-    const dbIsPaused = currentEmployee.isPaused;
+    const isEmployeeActive = currentEmployee.isActive;
+    const isEmployeePaused = currentEmployee.isPaused;
     
-    // CRITICAL: Log state for debugging
+    // CRITICAL: Only log state changes, not every render
     const currentTime = Date.now();
     if (currentTime - lastClickTimeRef.current > 2000) { // Log only every 2 seconds max
-      console.log('🎨 HEADER STATE: Button state calculated from DB', {
+      console.log('🎨 HEADER STATE: Button state calculated', {
         employeeId: currentEmployee.id,
         employeeName: currentEmployee.name,
-        dbIsActive,
-        dbIsPaused,
+        isActive: isEmployeeActive,
+        isPaused: isEmployeePaused,
         hasCurrentTicket,
-        buttonAction: dbIsActive ? 'PAUSE' : 'RESUME',
-        propIsPaused: isPaused, // For comparison only
-        stateConsistency: dbIsActive === !dbIsPaused ? 'CONSISTENT' : 'INCONSISTENT'
+        buttonAction: isEmployeeActive ? 'PAUSE' : 'RESUME'
       });
       lastClickTimeRef.current = currentTime;
     }
 
     return {
-      isActive: dbIsActive,
-      isPaused: dbIsPaused,
-      shouldShowResume: !dbIsActive, // If not active in DB, show resume
-      shouldShowPause: dbIsActive,   // If active in DB, show pause
+      isActive: isEmployeeActive,
+      isPaused: isEmployeePaused,
+      shouldShowResume: !isEmployeeActive, // If not active, show resume
+      shouldShowPause: isEmployeeActive,   // If active, show pause
       isDisabled: hasCurrentTicket || !isConnected || isClickInProgressRef.current
     };
-  }, [currentEmployee.isActive, currentEmployee.isPaused, hasCurrentTicket, isConnected, currentEmployee.id, currentEmployee.name, isPaused]);
+  }, [currentEmployee.isActive, currentEmployee.isPaused, hasCurrentTicket, isConnected, currentEmployee.id, currentEmployee.name]);
 
   // CRITICAL FIX: Optimized click handler with better debouncing
   const handleTogglePauseClick = useCallback(async () => {
@@ -181,7 +179,7 @@ export default function EmployeeHeader({
       propIsPaused: isPaused,
       hasTicket: hasCurrentTicket,
       buttonAction: buttonState.shouldShowResume ? 'RESUME' : 'PAUSE',
-      isConsistent: currentEmployee.isActive === !currentEmployee.isPaused,
+      isConsistent: currentEmployee.isActive === !isPaused,
       timestamp: new Date().toLocaleTimeString()
     };
   }, [currentEmployee.isActive, currentEmployee.isPaused, isPaused, hasCurrentTicket, buttonState.shouldShowResume]);
