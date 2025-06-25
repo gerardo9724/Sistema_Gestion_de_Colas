@@ -40,6 +40,42 @@ const convertFirestoreEmployee = (doc: any): Employee => {
   };
 };
 
+// CRITICAL FIX: Track update operations to prevent excessive calls
+const updateOperationsTracker = {
+  lastUpdateTime: new Map<string, number>(),
+  pendingUpdates: new Map<string, Promise<void>>(),
+  
+  // Check if update is too frequent
+  isTooFrequent(employeeId: string): boolean {
+    const lastUpdate = this.lastUpdateTime.get(employeeId) || 0;
+    const now = Date.now();
+    const timeDiff = now - lastUpdate;
+    
+    // CRITICAL: Minimum 1 second between updates for same employee
+    return timeDiff < 1000;
+  },
+  
+  // Record update time
+  recordUpdate(employeeId: string): void {
+    this.lastUpdateTime.set(employeeId, Date.now());
+  },
+  
+  // Check if update is already pending
+  hasPendingUpdate(employeeId: string): boolean {
+    return this.pendingUpdates.has(employeeId);
+  },
+  
+  // Set pending update
+  setPendingUpdate(employeeId: string, promise: Promise<void>): void {
+    this.pendingUpdates.set(employeeId, promise);
+    
+    // Clean up when promise resolves
+    promise.finally(() => {
+      this.pendingUpdates.delete(employeeId);
+    });
+  }
+};
+
 export const employeeService = {
   // Get all employees
   async getAllEmployees(): Promise<Employee[]> {
@@ -87,16 +123,37 @@ export const employeeService = {
     }
   },
 
-  // CRITICAL FIX: Simplified update employee function
+  // CRITICAL FIX: Heavily optimized update employee function with debouncing
   async updateEmployee(employeeId: string, updates: Partial<Employee>): Promise<void> {
     try {
-      console.log('💾 EMPLOYEE SERVICE: Starting update operation', {
+      console.log('💾 EMPLOYEE SERVICE: Update request received', {
         employeeId,
-        updateKeys: Object.keys(updates)
+        updateKeys: Object.keys(updates),
+        timestamp: new Date().toISOString()
       });
 
       if (!employeeId) {
         throw new Error('Employee ID is required for update');
+      }
+
+      // CRITICAL: Check for too frequent updates
+      if (updateOperationsTracker.isTooFrequent(employeeId)) {
+        console.log('🚫 EMPLOYEE SERVICE: Update blocked - too frequent', {
+          employeeId,
+          lastUpdate: updateOperationsTracker.lastUpdateTime.get(employeeId)
+        });
+        return;
+      }
+
+      // CRITICAL: Check for pending updates
+      if (updateOperationsTracker.hasPendingUpdate(employeeId)) {
+        console.log('⏳ EMPLOYEE SERVICE: Update blocked - already pending', {
+          employeeId
+        });
+        
+        // Wait for pending update to complete
+        await updateOperationsTracker.pendingUpdates.get(employeeId);
+        return;
       }
 
       const employeeRef = doc(db, 'employees', employeeId);
@@ -117,8 +174,13 @@ export const employeeService = {
         finalUpdateData: updateData
       });
 
-      // Direct update without complex timeout handling
-      await updateDoc(employeeRef, updateData);
+      // CRITICAL: Create and track the update promise
+      const updatePromise = updateDoc(employeeRef, updateData);
+      updateOperationsTracker.setPendingUpdate(employeeId, updatePromise);
+      updateOperationsTracker.recordUpdate(employeeId);
+
+      // Execute the update
+      await updatePromise;
       
       console.log('✅ EMPLOYEE SERVICE: Firebase update completed successfully', {
         employeeId,
@@ -126,6 +188,10 @@ export const employeeService = {
       });
 
       // Log critical state changes
+      if (updates.isActive !== undefined) {
+        console.log(`🎯 EMPLOYEE SERVICE: ACTIVE STATE UPDATED - Employee ${employeeId} isActive: ${updates.isActive}`);
+      }
+      
       if (updates.isPaused !== undefined) {
         console.log(`🎯 EMPLOYEE SERVICE: PAUSE STATE UPDATED - Employee ${employeeId} isPaused: ${updates.isPaused}`);
       }
@@ -158,22 +224,48 @@ export const employeeService = {
     }
   },
 
-  // CRITICAL FIX: Optimized subscription with controlled logging
+  // CRITICAL FIX: Optimized subscription with controlled logging and change detection
   subscribeToEmployees(callback: (employees: Employee[]) => void): () => void {
     const q = query(collection(db, 'employees'), orderBy('createdAt', 'asc'));
     
     // Track last update time to prevent excessive logging
-    const lastLogTimeRef = { value: 0 };
-    const LOG_THROTTLE = 5000; // 5 seconds between logs
+    let lastLogTime = 0;
+    let lastEmployeeStates = new Map<string, { isActive: boolean; isPaused: boolean }>();
+    const LOG_THROTTLE = 3000; // 3 seconds between logs
     
     return onSnapshot(q, (querySnapshot) => {
       const employees = querySnapshot.docs.map(convertFirestoreEmployee);
       
-      // Throttle logging to prevent console overflow
+      // CRITICAL: Only log significant changes, not every update
       const now = Date.now();
-      if (now - lastLogTimeRef.value > LOG_THROTTLE) {
-        console.log(`🔄 EMPLOYEE SERVICE: Real-time update received with ${employees.length} employees`);
-        lastLogTimeRef.value = now;
+      let hasSignificantChanges = false;
+      
+      // Check for significant state changes
+      employees.forEach(employee => {
+        const lastState = lastEmployeeStates.get(employee.id);
+        const currentState = { isActive: employee.isActive, isPaused: employee.isPaused };
+        
+        if (!lastState || 
+            lastState.isActive !== currentState.isActive || 
+            lastState.isPaused !== currentState.isPaused) {
+          hasSignificantChanges = true;
+          lastEmployeeStates.set(employee.id, currentState);
+          
+          console.log(`🔄 EMPLOYEE STATE CHANGE: ${employee.name}`, {
+            employeeId: employee.id,
+            previous: lastState,
+            current: currentState,
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+      
+      // Throttle general logging but always log significant changes
+      if (hasSignificantChanges || (now - lastLogTime > LOG_THROTTLE)) {
+        if (!hasSignificantChanges) {
+          console.log(`🔄 EMPLOYEE SERVICE: Routine update received with ${employees.length} employees`);
+        }
+        lastLogTime = now;
       }
       
       callback(employees);
