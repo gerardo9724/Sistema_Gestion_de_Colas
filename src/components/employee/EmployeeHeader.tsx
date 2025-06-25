@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useMemo } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { LogOut, Play, Pause, Clock, Wifi, WifiOff } from 'lucide-react';
 import type { User, Employee } from '../../types';
 
@@ -22,49 +22,14 @@ export default function EmployeeHeader({
   onTogglePause
 }: EmployeeHeaderProps) {
   
-  // CRITICAL FIX: Debounce click protection with simpler approach
+  // CRITICAL FIX: Simplified click protection
   const isClickInProgressRef = useRef<boolean>(false);
-  const lastClickTimeRef = useRef<number>(0);
 
-  // CRITICAL FIX: Memoize button state to prevent unnecessary re-calculations
-  const buttonState = useMemo(() => {
-    const isEmployeeActive = currentEmployee.isActive;
-    const isEmployeePaused = currentEmployee.isPaused;
-    
-    // CRITICAL: Only log state changes, not every render
-    const currentTime = Date.now();
-    if (currentTime - lastClickTimeRef.current > 2000) { // Log only every 2 seconds max
-      console.log('🎨 HEADER STATE: Button state calculated', {
-        employeeId: currentEmployee.id,
-        employeeName: currentEmployee.name,
-        isActive: isEmployeeActive,
-        isPaused: isEmployeePaused,
-        hasCurrentTicket,
-        buttonAction: isEmployeeActive ? 'PAUSE' : 'RESUME'
-      });
-      lastClickTimeRef.current = currentTime;
-    }
-
-    return {
-      isActive: isEmployeeActive,
-      isPaused: isEmployeePaused,
-      shouldShowResume: !isEmployeeActive, // If not active, show resume
-      shouldShowPause: isEmployeeActive,   // If active, show pause
-      isDisabled: hasCurrentTicket || !isConnected || isClickInProgressRef.current
-    };
-  }, [currentEmployee.isActive, currentEmployee.isPaused, hasCurrentTicket, isConnected, currentEmployee.id, currentEmployee.name]);
-
-  // CRITICAL FIX: Optimized click handler with better debouncing
+  // CRITICAL FIX: Simplified click handler
   const handleTogglePauseClick = useCallback(async () => {
-    const now = Date.now();
-    
-    // CRITICAL: Prevent rapid clicks (minimum 2 seconds between clicks)
-    if (now - lastClickTimeRef.current < 2000) {
-      console.log('🚫 CLICK BLOCKED: Too rapid, ignoring click');
-      return;
-    }
+    console.log('🔘 HEADER BUTTON CLICKED: Starting toggle pause');
 
-    // CRITICAL: Prevent multiple simultaneous executions
+    // CRITICAL: Basic protection against rapid clicks
     if (isClickInProgressRef.current) {
       console.log('🚫 CLICK BLOCKED: Already in progress');
       return;
@@ -73,6 +38,7 @@ export default function EmployeeHeader({
     // CRITICAL: Validate function exists
     if (typeof onTogglePause !== 'function') {
       console.error('❌ CRITICAL ERROR: onTogglePause is not a function!');
+      alert('Error crítico: Función de pausa no disponible');
       return;
     }
 
@@ -89,87 +55,47 @@ export default function EmployeeHeader({
       return;
     }
 
-    // CRITICAL: Set protection flags
+    // CRITICAL: Set protection flag
     isClickInProgressRef.current = true;
-    lastClickTimeRef.current = now;
-
-    console.log('🚀 EXECUTING TOGGLE PAUSE', {
-      currentState: buttonState,
-      timestamp: new Date().toISOString()
-    });
 
     try {
-      // CRITICAL: Execute the toggle function
+      console.log('🚀 EXECUTING TOGGLE PAUSE');
+      
+      // CRITICAL FIX: Direct function call without complex timeout handling
       await onTogglePause();
       
-      console.log('✅ TOGGLE PAUSE COMPLETED SUCCESSFULLY');
+      console.log('✅ TOGGLE PAUSE EXECUTED SUCCESSFULLY');
       
     } catch (error) {
-      console.error('❌ TOGGLE PAUSE ERROR:', error);
+      console.error('❌ TOGGLE PAUSE ERROR in header:', error);
       
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      let errorMessage = 'Error al cambiar estado de pausa';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       alert(`Error: ${errorMessage}`);
-      
     } finally {
-      // CRITICAL: Reset click protection after delay
+      // CRITICAL: Reset click protection after short delay
       setTimeout(() => {
         isClickInProgressRef.current = false;
         console.log('🔓 HEADER: Click protection reset');
-      }, 1500); // Increased delay to prevent rapid clicks
+      }, 1000);
     }
-  }, [onTogglePause, hasCurrentTicket, isConnected, buttonState]);
+  }, [onTogglePause, hasCurrentTicket, isConnected]);
 
-  // CRITICAL FIX: Memoize button styling to prevent re-calculations
-  const buttonStyling = useMemo(() => {
-    const baseClasses = "flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden";
-    
-    if (buttonState.isDisabled) {
-      return `${baseClasses} bg-gray-300 text-gray-500 cursor-not-allowed opacity-50`;
-    }
-    
-    if (buttonState.shouldShowResume) {
-      return `${baseClasses} bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl`;
-    } else {
-      return `${baseClasses} bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl`;
-    }
-  }, [buttonState.isDisabled, buttonState.shouldShowResume]);
+  // CRITICAL FIX: Use currentEmployee.isActive directly from props for real-time updates
+  const isEmployeeActive = currentEmployee.isActive;
+  const isEmployeePaused = currentEmployee.isPaused;
 
-  // CRITICAL FIX: Memoize button content to prevent re-renders
-  const buttonContent = useMemo(() => {
-    if (isClickInProgressRef.current) {
-      return (
-        <>
-          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-          <span>Procesando...</span>
-        </>
-      );
-    }
-    
-    if (buttonState.shouldShowResume) {
-      return (
-        <>
-          <Play size={20} className={!hasCurrentTicket && isConnected ? "animate-pulse" : ""} />
-          <span>Reanudar</span>
-        </>
-      );
-    } else {
-      return (
-        <>
-          <Pause size={20} />
-          <span>Pausar</span>
-        </>
-      );
-    }
-  }, [buttonState.shouldShowResume, hasCurrentTicket, isConnected]);
-
-  // CRITICAL FIX: Memoize button title to prevent re-calculations
-  const buttonTitle = useMemo(() => {
-    if (!isConnected) return 'Sin conexión a Firebase';
-    if (hasCurrentTicket) return 'No se puede pausar con ticket activo';
-    if (isClickInProgressRef.current) return 'Procesando...';
-    if (buttonState.shouldShowResume) return 'Reanudar y buscar tickets disponibles';
-    return 'Pausar atención';
-  }, [isConnected, hasCurrentTicket, buttonState.shouldShowResume]);
+  console.log('🎨 HEADER RENDER: Button state', {
+    employeeId: currentEmployee.id,
+    employeeName: currentEmployee.name,
+    isActive: isEmployeeActive,
+    isPaused: isEmployeePaused,
+    hasCurrentTicket,
+    buttonShouldShow: isEmployeeActive ? 'PAUSE' : 'RESUME'
+  });
 
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
@@ -209,14 +135,41 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* CRITICAL FIX: Optimized button with memoized properties */}
+            {/* CRITICAL FIX: Button state based on isActive property with real-time updates */}
             <button
               onClick={handleTogglePauseClick}
-              disabled={buttonState.isDisabled}
-              className={buttonStyling}
-              title={buttonTitle}
+              disabled={hasCurrentTicket || !isConnected}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden ${
+                hasCurrentTicket || !isConnected
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
+                  : !isEmployeeActive // If not active (paused), show green resume button
+                    ? 'bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl' 
+                    : 'bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
+              }`}
+              title={
+                !isConnected ? 'Sin conexión a Firebase' :
+                hasCurrentTicket ? 'No se puede pausar con ticket activo' :
+                isClickInProgressRef.current ? 'Procesando...' :
+                !isEmployeeActive ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'
+              }
             >
-              {buttonContent}
+              {/* CRITICAL: Show loading state when processing */}
+              {isClickInProgressRef.current ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <span>Procesando...</span>
+                </>
+              ) : !isEmployeeActive ? ( // If not active, show resume
+                <>
+                  <Play size={20} className={!hasCurrentTicket && isConnected ? "animate-pulse" : ""} />
+                  <span>Reanudar</span>
+                </>
+              ) : ( // If active, show pause
+                <>
+                  <Pause size={20} />
+                  <span>Pausar</span>
+                </>
+              )}
             </button>
             
             <button
