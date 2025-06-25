@@ -246,7 +246,7 @@ export const ticketQueueService = {
     }
   },
 
-  // FIXED: Derive ticket to another employee with proper assignment
+  // CRITICAL FIX: Derive ticket to another employee with IMMEDIATE source employee liberation
   async deriveTicketToEmployee(
     ticketId: string, 
     fromEmployeeId: string, 
@@ -284,14 +284,15 @@ export const ticketQueueService = {
         sourceEmployee: { id: sourceEmployee.id, name: sourceEmployee.name }
       });
 
-      // CRITICAL FIX: Always clear the source employee's current ticket first
+      // CRITICAL FIX: IMMEDIATELY clear the source employee's current ticket and pause them
+      // This ensures they can continue with other tickets right away
       await employeeService.updateEmployee(fromEmployeeId, {
         ...sourceEmployee,
-        currentTicketId: undefined,
-        isPaused: true
+        currentTicketId: undefined, // CRITICAL: Clear current ticket immediately
+        isPaused: true // CRITICAL: Pause to prevent auto-assignment until they resume
       });
 
-      console.log('✅ DERIVATION: Source employee cleared successfully');
+      console.log('✅ DERIVATION: Source employee IMMEDIATELY cleared and ready for other tickets');
 
       // Check if target employee is available for immediate assignment
       if (!targetEmployee.currentTicketId && !targetEmployee.isPaused) {
@@ -356,7 +357,9 @@ export const ticketQueueService = {
       });
 
       console.log('📝 DERIVATION: Derivation record created successfully');
-      console.log('🎉 DERIVATION: Complete derivation process finished successfully');
+      
+      // CRITICAL SUCCESS: Source employee is now FREE to continue with other tickets
+      console.log('🎉 DERIVATION COMPLETE: Source employee can now continue with other tickets immediately');
 
     } catch (error) {
       console.error('❌ DERIVATION ERROR:', error);
@@ -364,7 +367,7 @@ export const ticketQueueService = {
     }
   },
 
-  // FIXED: Derive ticket back to general queue with proper cleanup
+  // CRITICAL FIX: Derive ticket back to general queue with IMMEDIATE source employee liberation
   async deriveTicketToGeneralQueue(
     ticketId: string, 
     fromEmployeeId: string,
@@ -390,6 +393,15 @@ export const ticketQueueService = {
         throw new Error('Source employee not found');
       }
 
+      // CRITICAL FIX: IMMEDIATELY clear source employee and pause them
+      await employeeService.updateEmployee(fromEmployeeId, {
+        ...sourceEmployee,
+        currentTicketId: undefined, // CRITICAL: Clear current ticket immediately
+        isPaused: true // CRITICAL: Pause to prevent auto-assignment until they resume
+      });
+
+      console.log('✅ QUEUE DERIVATION: Source employee IMMEDIATELY cleared and ready for other tickets');
+
       // CRITICAL FIX: Return ticket to general queue with proper status
       await ticketService.updateTicket(ticketId, {
         status: 'waiting', // CRITICAL: Set back to waiting
@@ -404,13 +416,6 @@ export const ticketQueueService = {
         assignedToEmployee: undefined, // CRITICAL: Clear personal assignment
       });
 
-      // Update source employee to clear current ticket
-      await employeeService.updateEmployee(fromEmployeeId, {
-        ...sourceEmployee,
-        currentTicketId: undefined,
-        isPaused: true
-      });
-
       // Create derivation record
       await ticketDerivationService.createDerivation({
         ticketId,
@@ -422,6 +427,7 @@ export const ticketQueueService = {
       });
 
       console.log('✅ QUEUE DERIVATION: Ticket returned to general queue successfully');
+      console.log('🎉 QUEUE DERIVATION COMPLETE: Source employee can now continue with other tickets immediately');
 
     } catch (error) {
       console.error('❌ QUEUE DERIVATION ERROR:', error);
