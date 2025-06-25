@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import EmployeeHeader from './employee/EmployeeHeader';
-import EmployeeStatusCard from './employee/EmployeeStatusCard';
 import CurrentTicketCard from './employee/CurrentTicketCard';
 import QueueList from './employee/QueueList';
 import QueueStatusCard from './employee/QueueStatusCard';
@@ -11,7 +10,6 @@ import EnhancedDeriveTicketModal from './employee/EnhancedDeriveTicketModal';
 import CancelTicketModal from './employee/CancelTicketModal';
 import PasswordChangeModal from './employee/PasswordChangeModal';
 import { useEmployeeTicketManagement } from '../hooks/useEmployeeTicketManagement';
-import { useEmployeeStatusManagement } from '../hooks/useEmployeeStatusManagement';
 import { useEmployeeTimer } from '../hooks/useEmployeeTimer';
 import { useEmployeeQueueStats } from '../hooks/useEmployeeQueueStats';
 
@@ -27,6 +25,9 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
 
+  // CRITICAL FIX: Remove initialization tracking to simplify logic
+  const [initializationComplete, setInitializationComplete] = useState(false);
+
   // Custom hooks for modular functionality
   const {
     currentTicket,
@@ -36,14 +37,9 @@ export default function EmpleadoUser() {
     handleCancelTicket,
     handleDeriveTicket,
     handleRecallTicket,
-    isLoading: ticketLoading
+    handleTogglePause,
+    isLoading
   } = useEmployeeTicketManagement(currentEmployee?.id || '');
-
-  // NEW: Employee status management hook
-  const {
-    isLoading: statusLoading,
-    handleToggleEmployeeStatus
-  } = useEmployeeStatusManagement(currentEmployee);
 
   const {
     elapsedTime,
@@ -52,6 +48,36 @@ export default function EmpleadoUser() {
   } = useEmployeeTimer(currentTicket);
 
   const queueStats = useEmployeeQueueStats(currentEmployee?.id || '');
+
+  // CRITICAL FIX: Simplified initialization logic with proper isActive/isPaused handling
+  useEffect(() => {
+    // Only run once when component mounts and employee is available
+    if (currentEmployee && !initializationComplete) {
+      console.log('🔄 EMPLOYEE INITIALIZATION: Setting initial state', {
+        currentIsActive: currentEmployee.isActive,
+        currentIsPaused: currentEmployee.isPaused,
+        hasCurrentTicket: !!currentEmployee.currentTicketId
+      });
+      
+      // Mark initialization as complete to prevent repeated execution
+      setInitializationComplete(true);
+      
+      // CRITICAL FIX: Check if employee needs to be set to inactive/paused state
+      // Only auto-pause if employee is active but has no current ticket
+      if (currentEmployee.isActive && !currentEmployee.currentTicketId) {
+        console.log('⏸️ EMPLOYEE INITIALIZATION: Auto-pausing employee on login (isActive: false, isPaused: true)');
+        
+        // Use a timeout to ensure all hooks are properly initialized
+        setTimeout(() => {
+          handleTogglePause().catch(error => {
+            console.error('❌ EMPLOYEE INITIALIZATION ERROR:', error);
+          });
+        }, 1000);
+      } else {
+        console.log('✅ EMPLOYEE INITIALIZATION: No auto-pause needed, employee already in correct state');
+      }
+    }
+  }, [currentEmployee, handleTogglePause, initializationComplete]);
 
   const handleLogout = () => {
     dispatch({ type: 'LOGOUT' });
@@ -133,19 +159,9 @@ export default function EmpleadoUser() {
     switch (activeTab) {
       case 'queue':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Employee Status Card - NEW LOCATION */}
-            <div className="lg:col-span-1">
-              <EmployeeStatusCard
-                employee={currentEmployee}
-                hasCurrentTicket={!!currentTicket}
-                isConnected={state.isFirebaseConnected}
-                onToggleStatus={handleToggleEmployeeStatus}
-              />
-            </div>
-
-            {/* Current Service and Queue */}
-            <div className="lg:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Current Service */}
+            <div className="space-y-6">
               {currentTicket ? (
                 <CurrentTicketCard
                   ticket={currentTicket}
@@ -160,13 +176,14 @@ export default function EmpleadoUser() {
               ) : (
                 <div className="bg-white rounded-2xl shadow-xl p-6">
                   <h2 className="text-2xl font-bold text-gray-800 mb-6">Servicio Actual</h2>
+                  {/* CRITICAL FIX: Use isActive instead of isPaused for display logic */}
                   {!currentEmployee.isActive ? (
                     <div className="text-center py-12">
                       <div className="text-6xl mb-4">☕</div>
                       <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
                       <p className="text-lg text-gray-600 mb-6">
                         {waitingTickets.length > 0 
-                          ? 'Activa tu estado para comenzar a recibir tickets'
+                          ? 'Presiona "Reanudar" para comenzar a atender tickets'
                           : 'No hay tickets pendientes. Esperando nuevos tickets...'
                         }
                       </p>
@@ -176,7 +193,7 @@ export default function EmpleadoUser() {
                             <strong>Próximo ticket:</strong> #{waitingTickets[0].number.toString().padStart(3, '0')} - {waitingTickets[0].serviceType}
                           </p>
                           <p className="text-yellow-700 text-xs">
-                            Al activar tu estado, automáticamente recibirás tickets para atención
+                            Al reanudar, automáticamente tomarás este ticket para atención
                           </p>
                         </div>
                       )}
@@ -187,7 +204,7 @@ export default function EmpleadoUser() {
                       <p className="text-xl text-gray-500">No hay tickets en atención</p>
                       <p className="text-gray-400">
                         {waitingTickets.length > 0 
-                          ? 'Esperando asignación automática de tickets'
+                          ? 'Esperando asignación automática o presiona "Pausar" para descansar'
                           : 'Esperando nuevos tickets...'
                         }
                       </p>
@@ -210,15 +227,13 @@ export default function EmpleadoUser() {
               />
             </div>
 
-            {/* Waiting Queue - Full Width */}
-            <div className="lg:col-span-3">
-              <QueueList
-                tickets={waitingTickets}
-                currentTicket={currentTicket}
-                isPaused={!currentEmployee.isActive}
-                onStartService={handleStartService}
-              />
-            </div>
+            {/* Waiting Queue */}
+            <QueueList
+              tickets={waitingTickets}
+              currentTicket={currentTicket}
+              isPaused={!currentEmployee.isActive} // CRITICAL FIX: Use !isActive instead of isPaused
+              onStartService={handleStartService}
+            />
           </div>
         );
 
@@ -239,12 +254,15 @@ export default function EmpleadoUser() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
-      {/* Header - Simplified without pause button */}
+      {/* Header */}
       <EmployeeHeader
         currentUser={currentUser}
         currentEmployee={currentEmployee}
         isConnected={state.isFirebaseConnected}
+        isPaused={!currentEmployee.isActive} // CRITICAL FIX: Use !isActive instead of isPaused
+        hasCurrentTicket={!!currentTicket}
         onLogout={handleLogout}
+        onTogglePause={handleTogglePause}
       />
 
       <div className="max-w-7xl mx-auto px-6 py-8">

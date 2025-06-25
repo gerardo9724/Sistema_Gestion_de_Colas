@@ -1,21 +1,93 @@
-import React from 'react';
-import { LogOut, Wifi, WifiOff } from 'lucide-react';
+import React, { useRef, useCallback } from 'react';
+import { LogOut, Play, Pause, Clock, Wifi, WifiOff } from 'lucide-react';
 import type { User, Employee } from '../../types';
 
 interface EmployeeHeaderProps {
   currentUser: User;
   currentEmployee: Employee;
   isConnected: boolean;
+  isPaused: boolean;
+  hasCurrentTicket: boolean;
   onLogout: () => void;
+  onTogglePause: () => void;
 }
 
 export default function EmployeeHeader({
   currentUser,
   currentEmployee,
   isConnected,
-  onLogout
+  isPaused,
+  hasCurrentTicket,
+  onLogout,
+  onTogglePause
 }: EmployeeHeaderProps) {
   
+  // CRITICAL FIX: Simplified click protection
+  const isClickInProgressRef = useRef<boolean>(false);
+
+  // CRITICAL FIX: Simplified click handler
+  const handleTogglePauseClick = useCallback(async () => {
+    console.log('🔘 HEADER BUTTON CLICKED: Starting toggle pause');
+
+    // CRITICAL: Basic protection against rapid clicks
+    if (isClickInProgressRef.current) {
+      console.log('🚫 CLICK BLOCKED: Already in progress');
+      return;
+    }
+
+    // CRITICAL: Validate function exists
+    if (typeof onTogglePause !== 'function') {
+      console.error('❌ CRITICAL ERROR: onTogglePause is not a function!');
+      alert('Error crítico: Función de pausa no disponible');
+      return;
+    }
+
+    // CRITICAL: Check blocking conditions
+    if (hasCurrentTicket) {
+      console.log('🚫 ACTION BLOCKED: Employee has current ticket');
+      alert('No puedes pausar mientras tienes un ticket en atención. Finaliza el ticket primero.');
+      return;
+    }
+
+    if (!isConnected) {
+      console.log('🚫 ACTION BLOCKED: No Firebase connection');
+      alert('Sin conexión a Firebase. Verifica tu conexión a internet.');
+      return;
+    }
+
+    // CRITICAL: Set protection flag
+    isClickInProgressRef.current = true;
+
+    try {
+      console.log('🚀 EXECUTING TOGGLE PAUSE');
+      
+      // CRITICAL FIX: Direct function call without complex timeout handling
+      await onTogglePause();
+      
+      console.log('✅ TOGGLE PAUSE EXECUTED SUCCESSFULLY');
+      
+    } catch (error) {
+      console.error('❌ TOGGLE PAUSE ERROR in header:', error);
+      
+      let errorMessage = 'Error al cambiar estado de pausa';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      // CRITICAL: Reset click protection after short delay
+      setTimeout(() => {
+        isClickInProgressRef.current = false;
+        console.log('🔓 HEADER: Click protection reset');
+      }, 1000);
+    }
+  }, [onTogglePause, hasCurrentTicket, isConnected]);
+
+  // CRITICAL FIX: Use isActive to determine button state instead of isPaused
+  const isEmployeeActive = currentEmployee.isActive;
+  const isEmployeePaused = currentEmployee.isPaused;
+
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
       <div className="max-w-7xl mx-auto px-6 py-4">
@@ -53,6 +125,43 @@ export default function EmployeeHeader({
                 )}
               </div>
             </div>
+            
+            {/* CRITICAL FIX: Button state based on isActive property */}
+            <button
+              onClick={handleTogglePauseClick}
+              disabled={hasCurrentTicket || !isConnected}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden ${
+                hasCurrentTicket || !isConnected
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
+                  : !isEmployeeActive // If not active (paused), show green resume button
+                    ? 'bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl' 
+                    : 'bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
+              }`}
+              title={
+                !isConnected ? 'Sin conexión a Firebase' :
+                hasCurrentTicket ? 'No se puede pausar con ticket activo' :
+                isClickInProgressRef.current ? 'Procesando...' :
+                !isEmployeeActive ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'
+              }
+            >
+              {/* CRITICAL: Show loading state when processing */}
+              {isClickInProgressRef.current ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <span>Procesando...</span>
+                </>
+              ) : !isEmployeeActive ? ( // If not active, show resume
+                <>
+                  <Play size={20} className={!hasCurrentTicket && isConnected ? "animate-pulse" : ""} />
+                  <span>Reanudar</span>
+                </>
+              ) : ( // If active, show pause
+                <>
+                  <Pause size={20} />
+                  <span>Pausar</span>
+                </>
+              )}
+            </button>
             
             <button
               onClick={onLogout}
