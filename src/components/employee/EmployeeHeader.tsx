@@ -22,10 +22,10 @@ export default function EmployeeHeader({
   onTogglePause
 }: EmployeeHeaderProps) {
   
-  // CRITICAL FIX: Simplified click protection
+  // CRITICAL FIX: Simple click protection
   const isClickInProgressRef = useRef<boolean>(false);
 
-  // CRITICAL FIX: Simplified click handler
+  // CRITICAL FIX: Enhanced click handler with proper error handling
   const handleTogglePauseClick = useCallback(async () => {
     console.log('🔘 HEADER BUTTON CLICKED: Starting toggle pause');
 
@@ -61,7 +61,7 @@ export default function EmployeeHeader({
     try {
       console.log('🚀 EXECUTING TOGGLE PAUSE');
       
-      // CRITICAL FIX: Direct function call without complex timeout handling
+      // CRITICAL FIX: Wrap in try-catch to handle any promise rejections
       await onTogglePause();
       
       console.log('✅ TOGGLE PAUSE EXECUTED SUCCESSFULLY');
@@ -69,12 +69,9 @@ export default function EmployeeHeader({
     } catch (error) {
       console.error('❌ TOGGLE PAUSE ERROR in header:', error);
       
-      let errorMessage = 'Error al cambiar estado de pausa';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+      // CRITICAL: Don't show alert for every error, the hook handles user feedback
+      // Just log the error here
       
-      alert(`Error: ${errorMessage}`);
     } finally {
       // CRITICAL: Reset click protection after short delay
       setTimeout(() => {
@@ -84,7 +81,7 @@ export default function EmployeeHeader({
     }
   }, [onTogglePause, hasCurrentTicket, isConnected]);
 
-  // CRITICAL FIX: Use currentEmployee.isActive directly from props for real-time updates
+  // CRITICAL FIX: Use currentEmployee.isActive directly for real-time updates
   const isEmployeeActive = currentEmployee.isActive;
   const isEmployeePaused = currentEmployee.isPaused;
 
@@ -138,9 +135,9 @@ export default function EmployeeHeader({
             {/* CRITICAL FIX: Button state based on isActive property with real-time updates */}
             <button
               onClick={handleTogglePauseClick}
-              disabled={hasCurrentTicket || !isConnected}
+              disabled={hasCurrentTicket || !isConnected || isClickInProgressRef.current}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden ${
-                hasCurrentTicket || !isConnected
+                hasCurrentTicket || !isConnected || isClickInProgressRef.current
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
                   : !isEmployeeActive // If not active (paused), show green resume button
                     ? 'bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl' 

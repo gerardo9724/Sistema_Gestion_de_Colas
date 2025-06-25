@@ -8,7 +8,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
   const { state, deriveTicketToEmployee, deriveTicketToQueue, autoAssignNextTicket } = useApp();
   const [isLoading, setIsLoading] = useState(false);
   
-  // CRITICAL FIX: Simplify debounce control - remove complex tracking
+  // CRITICAL FIX: Simple execution control
   const isToggleInProgressRef = useRef<boolean>(false);
 
   const currentEmployee = state.employees.find(e => e.id === employeeId);
@@ -194,11 +194,11 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // CRITICAL FIX: Simplified toggle pause function with proper isActive/isPaused logic
+  // CRITICAL FIX: Completely rewritten toggle pause function with proper error handling
   const handleTogglePause = useCallback(async () => {
-    console.log('🔄 TOGGLE PAUSE: Starting simplified toggle process');
-    
-    // CRITICAL: Basic protection against multiple simultaneous executions
+    console.log('🔄 TOGGLE PAUSE: Starting execution');
+
+    // CRITICAL: Prevent multiple simultaneous executions
     if (isToggleInProgressRef.current) {
       console.log('🚫 TOGGLE PAUSE: Already in progress, ignoring call');
       return;
@@ -228,66 +228,61 @@ export function useEmployeeTicketManagement(employeeId: string) {
     isToggleInProgressRef.current = true;
     setIsLoading(true);
 
-    console.log('👤 TOGGLE PAUSE: Starting execution', {
-      employeeId,
-      employeeName: currentEmployee.name,
-      currentIsActive: currentEmployee.isActive,
-      currentIsPaused: currentEmployee.isPaused
-    });
-
     try {
-      // CRITICAL FIX: Implement proper isActive/isPaused logic
+      // CRITICAL FIX: Simple toggle logic - isActive and isPaused are opposites
       const newIsActive = !currentEmployee.isActive;
-      const newIsPaused = !newIsActive; // isPaused is opposite of isActive
-      
-      console.log(`🔄 TOGGLE PAUSE: State transition`, {
+      const newIsPaused = !newIsActive;
+
+      console.log('🔄 TOGGLE PAUSE: State transition', {
+        employeeId,
+        employeeName: currentEmployee.name,
         from: { isActive: currentEmployee.isActive, isPaused: currentEmployee.isPaused },
-        to: { isActive: newIsActive, isPaused: newIsPaused },
-        action: newIsActive ? 'ACTIVATING/RESUMING' : 'DEACTIVATING/PAUSING'
+        to: { isActive: newIsActive, isPaused: newIsPaused }
       });
-      
-      // CRITICAL FIX: Update both properties ensuring they are opposites
+
+      // CRITICAL: Update employee state with proper error handling
       const updateData = {
         isActive: newIsActive,
         isPaused: newIsPaused
       };
 
-      console.log('💾 TOGGLE PAUSE: Sending update to Firebase:', {
-        employeeId,
-        updateData
-      });
+      console.log('💾 TOGGLE PAUSE: Updating employee state...');
+      
+      // CRITICAL FIX: Wrap in try-catch to handle Firebase errors properly
+      try {
+        await employeeService.updateEmployee(employeeId, updateData);
+        console.log('✅ TOGGLE PAUSE: Employee state updated successfully');
+      } catch (updateError) {
+        console.error('❌ TOGGLE PAUSE: Firebase update failed:', updateError);
+        throw new Error('Error al actualizar estado en la base de datos');
+      }
 
-      // CRITICAL: Direct database call
-      await employeeService.updateEmployee(employeeId, updateData);
-
-      console.log(`✅ TOGGLE PAUSE: Database update completed successfully`);
-
-      // CRITICAL: Handle post-update logic
-      if (!currentEmployee.isActive && newIsActive) {
-        console.log('🎯 RESUME: Employee resuming (isActive: true, isPaused: false)');
+      // CRITICAL: Handle post-update logic only if update was successful
+      if (newIsActive && !currentEmployee.isActive) {
+        console.log('🎯 RESUME: Employee resuming, attempting auto-assignment...');
         
         // Try auto-assignment after a delay
         setTimeout(async () => {
           try {
-            console.log('🤖 RESUME: Attempting auto-assignment...');
             const assignedTicket = await autoAssignNextTicket(employeeId);
             if (assignedTicket) {
               console.log(`✅ RESUME: Auto-assigned ticket ${assignedTicket.number}`);
             } else {
               console.log('📭 RESUME: No tickets available, employee ready');
             }
-          } catch (error) {
-            console.error('❌ RESUME ERROR:', error);
+          } catch (autoAssignError) {
+            console.error('❌ RESUME ERROR:', autoAssignError);
+            // Don't throw here, auto-assignment failure shouldn't break the toggle
           }
         }, 1000);
-        
-      } else if (currentEmployee.isActive && !newIsActive) {
-        console.log('⏸️ PAUSE: Employee paused (isActive: false, isPaused: true)');
+      } else if (!newIsActive && currentEmployee.isActive) {
+        console.log('⏸️ PAUSE: Employee paused successfully');
       }
-      
+
     } catch (error) {
       console.error('❌ TOGGLE PAUSE ERROR:', error);
       
+      // CRITICAL: Provide user-friendly error message
       let errorMessage = 'Error al cambiar estado de pausa';
       if (error instanceof Error) {
         errorMessage = error.message;

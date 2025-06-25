@@ -87,16 +87,22 @@ export const employeeService = {
     }
   },
 
-  // CRITICAL FIX: Simplified update employee function
+  // CRITICAL FIX: Enhanced update employee function with better error handling
   async updateEmployee(employeeId: string, updates: Partial<Employee>): Promise<void> {
     try {
       console.log('💾 EMPLOYEE SERVICE: Starting update operation', {
         employeeId,
-        updateKeys: Object.keys(updates)
+        updateKeys: Object.keys(updates),
+        updateValues: updates
       });
 
       if (!employeeId) {
         throw new Error('Employee ID is required for update');
+      }
+
+      // CRITICAL: Validate Firebase connection
+      if (!db) {
+        throw new Error('Firebase database not initialized');
       }
 
       const employeeRef = doc(db, 'employees', employeeId);
@@ -117,8 +123,15 @@ export const employeeService = {
         finalUpdateData: updateData
       });
 
-      // Direct update without complex timeout handling
-      await updateDoc(employeeRef, updateData);
+      // CRITICAL FIX: Add timeout and better error handling
+      const updatePromise = updateDoc(employeeRef, updateData);
+      
+      // Add a timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Update operation timed out')), 10000);
+      });
+
+      await Promise.race([updatePromise, timeoutPromise]);
       
       console.log('✅ EMPLOYEE SERVICE: Firebase update completed successfully', {
         employeeId,
@@ -126,6 +139,10 @@ export const employeeService = {
       });
 
       // Log critical state changes
+      if (updates.isActive !== undefined) {
+        console.log(`🎯 EMPLOYEE SERVICE: ACTIVE STATE UPDATED - Employee ${employeeId} isActive: ${updates.isActive}`);
+      }
+      
       if (updates.isPaused !== undefined) {
         console.log(`🎯 EMPLOYEE SERVICE: PAUSE STATE UPDATED - Employee ${employeeId} isPaused: ${updates.isPaused}`);
       }
@@ -135,13 +152,22 @@ export const employeeService = {
         employeeId,
         error: error instanceof Error ? {
           message: error.message,
-          name: error.name
+          name: error.name,
+          stack: error.stack
         } : error
       });
       
-      // Provide specific error information
+      // CRITICAL: Provide specific error information
       if (error instanceof Error) {
-        throw new Error(`Error al actualizar empleado: ${error.message}`);
+        if (error.message.includes('timeout')) {
+          throw new Error('La operación tardó demasiado tiempo. Verifica tu conexión a internet.');
+        } else if (error.message.includes('permission')) {
+          throw new Error('Sin permisos para actualizar empleado. Contacta al administrador.');
+        } else if (error.message.includes('not-found')) {
+          throw new Error('Empleado no encontrado en la base de datos.');
+        } else {
+          throw new Error(`Error al actualizar empleado: ${error.message}`);
+        }
       } else {
         throw new Error('Error desconocido al actualizar empleado');
       }
@@ -158,7 +184,7 @@ export const employeeService = {
     }
   },
 
-  // CRITICAL FIX: Optimized subscription with controlled logging
+  // CRITICAL FIX: Enhanced subscription with proper error handling
   subscribeToEmployees(callback: (employees: Employee[]) => void): () => void {
     const q = query(collection(db, 'employees'), orderBy('createdAt', 'asc'));
     
@@ -167,18 +193,26 @@ export const employeeService = {
     const LOG_THROTTLE = 5000; // 5 seconds between logs
     
     return onSnapshot(q, (querySnapshot) => {
-      const employees = querySnapshot.docs.map(convertFirestoreEmployee);
-      
-      // Throttle logging to prevent console overflow
-      const now = Date.now();
-      if (now - lastLogTimeRef.value > LOG_THROTTLE) {
-        console.log(`🔄 EMPLOYEE SERVICE: Real-time update received with ${employees.length} employees`);
-        lastLogTimeRef.value = now;
+      try {
+        const employees = querySnapshot.docs.map(convertFirestoreEmployee);
+        
+        // Throttle logging to prevent console overflow
+        const now = Date.now();
+        if (now - lastLogTimeRef.value > LOG_THROTTLE) {
+          console.log(`🔄 EMPLOYEE SERVICE: Real-time update received with ${employees.length} employees`);
+          lastLogTimeRef.value = now;
+        }
+        
+        callback(employees);
+      } catch (conversionError) {
+        console.error('❌ EMPLOYEE SERVICE: Error converting employee data:', conversionError);
+        // Still call callback with empty array to prevent UI from breaking
+        callback([]);
       }
-      
-      callback(employees);
     }, (error) => {
       console.error('❌ EMPLOYEE SERVICE: Real-time subscription error:', error);
+      // CRITICAL FIX: Don't throw here, just log the error
+      // This prevents uncaught promise rejections
     });
   }
 };
