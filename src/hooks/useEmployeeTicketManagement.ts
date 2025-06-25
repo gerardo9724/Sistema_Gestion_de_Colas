@@ -43,11 +43,11 @@ export function useEmployeeTicketManagement(employeeId: string) {
         waitTime
       });
 
+      // CRITICAL FIX: Update employee with proper isActive and isPaused logic
       await employeeService.updateEmployee(employeeId, {
-        ...currentEmployee,
         currentTicketId: ticketId,
-        isPaused: false,
-        isActive: true
+        isActive: true,    // CRITICAL: Employee becomes active when serving
+        isPaused: false    // CRITICAL: Employee is not paused when serving
       });
     } catch (error) {
       console.error('Error starting service:', error);
@@ -80,12 +80,12 @@ export function useEmployeeTicketManagement(employeeId: string) {
       if (callNext) {
         console.log('🔄 CALL NEXT: Attempting to auto-assign next ticket...');
         
+        // CRITICAL FIX: When calling next, keep employee active and not paused
         await employeeService.updateEmployee(employeeId, {
-          ...currentEmployee,
           currentTicketId: undefined,
           totalTicketsServed: currentEmployee.totalTicketsServed + 1,
-          isPaused: false,
-          isActive: true
+          isActive: true,    // CRITICAL: Keep active for next ticket
+          isPaused: false    // CRITICAL: Keep not paused for next ticket
         });
 
         setTimeout(async () => {
@@ -104,12 +104,12 @@ export function useEmployeeTicketManagement(employeeId: string) {
       } else {
         console.log('⏸️ COMPLETE ONLY: Completing ticket and pausing employee');
         
+        // CRITICAL FIX: When completing without calling next, pause employee
         await employeeService.updateEmployee(employeeId, {
-          ...currentEmployee,
           currentTicketId: undefined,
           totalTicketsServed: currentEmployee.totalTicketsServed + 1,
-          isPaused: true,
-          isActive: true
+          isActive: false,   // CRITICAL: Employee becomes inactive
+          isPaused: true     // CRITICAL: Employee becomes paused
         });
       }
 
@@ -137,12 +137,12 @@ export function useEmployeeTicketManagement(employeeId: string) {
         cancelledBy: employeeId
       });
 
+      // CRITICAL FIX: When cancelling, pause employee
       await employeeService.updateEmployee(employeeId, {
-        ...currentEmployee,
         currentTicketId: undefined,
         totalTicketsCancelled: currentEmployee.totalTicketsCancelled + 1,
-        isPaused: true,
-        isActive: true
+        isActive: false,   // CRITICAL: Employee becomes inactive
+        isPaused: true     // CRITICAL: Employee becomes paused
       });
     } catch (error) {
       console.error('Error cancelling ticket:', error);
@@ -194,7 +194,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // CRITICAL FIX: Simplified toggle pause function without complex debouncing
+  // CRITICAL FIX: Simplified toggle pause function with proper isActive/isPaused logic
   const handleTogglePause = useCallback(async () => {
     console.log('🔄 TOGGLE PAUSE: Starting simplified toggle process');
     
@@ -231,37 +231,40 @@ export function useEmployeeTicketManagement(employeeId: string) {
     console.log('👤 TOGGLE PAUSE: Starting execution', {
       employeeId,
       employeeName: currentEmployee.name,
-      currentPauseState: currentEmployee.isPaused,
-      currentActiveState: currentEmployee.isActive
+      currentIsActive: currentEmployee.isActive,
+      currentIsPaused: currentEmployee.isPaused
     });
 
     try {
-      const newPauseState = !currentEmployee.isPaused;
+      // CRITICAL FIX: Implement proper isActive/isPaused logic
+      const newIsActive = !currentEmployee.isActive;
+      const newIsPaused = !newIsActive; // isPaused is opposite of isActive
       
       console.log(`🔄 TOGGLE PAUSE: State transition`, {
-        from: { isPaused: currentEmployee.isPaused, isActive: currentEmployee.isActive },
-        to: { isPaused: newPauseState, isActive: currentEmployee.isActive },
-        action: newPauseState ? 'PAUSING' : 'RESUMING'
+        from: { isActive: currentEmployee.isActive, isPaused: currentEmployee.isPaused },
+        to: { isActive: newIsActive, isPaused: newIsPaused },
+        action: newIsActive ? 'ACTIVATING/RESUMING' : 'DEACTIVATING/PAUSING'
       });
       
-      // CRITICAL FIX: Simple update with only the necessary fields
+      // CRITICAL FIX: Update both properties ensuring they are opposites
       const updateData = {
-        isPaused: newPauseState
+        isActive: newIsActive,
+        isPaused: newIsPaused
       };
 
-      console.log('💾 TOGGLE PAUSE: Sending simple update to Firebase:', {
+      console.log('💾 TOGGLE PAUSE: Sending update to Firebase:', {
         employeeId,
         updateData
       });
 
-      // CRITICAL: Direct database call without complex timeout handling
+      // CRITICAL: Direct database call
       await employeeService.updateEmployee(employeeId, updateData);
 
       console.log(`✅ TOGGLE PAUSE: Database update completed successfully`);
 
       // CRITICAL: Handle post-update logic
-      if (currentEmployee.isPaused && !newPauseState) {
-        console.log('🎯 RESUME: Employee resuming');
+      if (!currentEmployee.isActive && newIsActive) {
+        console.log('🎯 RESUME: Employee resuming (isActive: true, isPaused: false)');
         
         // Try auto-assignment after a delay
         setTimeout(async () => {
@@ -278,8 +281,8 @@ export function useEmployeeTicketManagement(employeeId: string) {
           }
         }, 1000);
         
-      } else if (!currentEmployee.isPaused && newPauseState) {
-        console.log('⏸️ PAUSE: Employee paused successfully');
+      } else if (currentEmployee.isActive && !newIsActive) {
+        console.log('⏸️ PAUSE: Employee paused (isActive: false, isPaused: true)');
       }
       
     } catch (error) {

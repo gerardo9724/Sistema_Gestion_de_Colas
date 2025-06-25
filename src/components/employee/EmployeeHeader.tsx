@@ -84,6 +84,10 @@ export default function EmployeeHeader({
     }
   }, [onTogglePause, hasCurrentTicket, isConnected]);
 
+  // CRITICAL FIX: Use isActive to determine button state instead of isPaused
+  const isEmployeeActive = currentEmployee.isActive;
+  const isEmployeePaused = currentEmployee.isPaused;
+
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
       <div className="max-w-7xl mx-auto px-6 py-4">
@@ -122,14 +126,14 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* CRITICAL FIX: Simplified Resume/Pause Button */}
+            {/* CRITICAL FIX: Button state based on isActive property */}
             <button
               onClick={handleTogglePauseClick}
               disabled={hasCurrentTicket || !isConnected}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden ${
                 hasCurrentTicket || !isConnected
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
-                  : isPaused 
+                  : !isEmployeeActive // If not active (paused), show green resume button
                     ? 'bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl' 
                     : 'bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
               }`}
@@ -137,7 +141,7 @@ export default function EmployeeHeader({
                 !isConnected ? 'Sin conexión a Firebase' :
                 hasCurrentTicket ? 'No se puede pausar con ticket activo' :
                 isClickInProgressRef.current ? 'Procesando...' :
-                isPaused ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'
+                !isEmployeeActive ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'
               }
             >
               {/* CRITICAL: Show loading state when processing */}
@@ -146,12 +150,12 @@ export default function EmployeeHeader({
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                   <span>Procesando...</span>
                 </>
-              ) : isPaused ? (
+              ) : !isEmployeeActive ? ( // If not active, show resume
                 <>
                   <Play size={20} className={!hasCurrentTicket && isConnected ? "animate-pulse" : ""} />
                   <span>Reanudar</span>
                 </>
-              ) : (
+              ) : ( // If active, show pause
                 <>
                   <Pause size={20} />
                   <span>Pausar</span>

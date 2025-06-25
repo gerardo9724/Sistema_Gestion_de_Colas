@@ -25,8 +25,8 @@ export default function EmpleadoUser() {
   const currentUser = state.currentUser;
   const currentEmployee = state.currentEmployee;
 
-  // CRITICAL FIX: Add initialization tracking to prevent multiple pause attempts
-  const [isInitialized, setIsInitialized] = useState(false);
+  // CRITICAL FIX: Remove initialization tracking to simplify logic
+  const [initializationComplete, setInitializationComplete] = useState(false);
 
   // Custom hooks for modular functionality
   const {
@@ -49,30 +49,35 @@ export default function EmpleadoUser() {
 
   const queueStats = useEmployeeQueueStats(currentEmployee?.id || '');
 
-  // CRITICAL FIX: Auto-pause employee on login with initialization protection
+  // CRITICAL FIX: Simplified initialization logic with proper isActive/isPaused handling
   useEffect(() => {
-    const initializeEmployeePauseState = async () => {
-      if (!currentEmployee || isInitialized) return;
+    // Only run once when component mounts and employee is available
+    if (currentEmployee && !initializationComplete) {
+      console.log('🔄 EMPLOYEE INITIALIZATION: Setting initial state', {
+        currentIsActive: currentEmployee.isActive,
+        currentIsPaused: currentEmployee.isPaused,
+        hasCurrentTicket: !!currentEmployee.currentTicketId
+      });
       
-      if (!currentEmployee.isPaused && !currentEmployee.currentTicketId) {
-        try {
-          console.log('🔄 INITIAL PAUSE: Setting employee to paused state on login');
-          await handleTogglePause();
-          setIsInitialized(true);
-        } catch (error) {
-          console.error('Error setting initial pause state:', error);
-        }
+      // Mark initialization as complete to prevent repeated execution
+      setInitializationComplete(true);
+      
+      // CRITICAL FIX: Check if employee needs to be set to inactive/paused state
+      // Only auto-pause if employee is active but has no current ticket
+      if (currentEmployee.isActive && !currentEmployee.currentTicketId) {
+        console.log('⏸️ EMPLOYEE INITIALIZATION: Auto-pausing employee on login (isActive: false, isPaused: true)');
+        
+        // Use a timeout to ensure all hooks are properly initialized
+        setTimeout(() => {
+          handleTogglePause().catch(error => {
+            console.error('❌ EMPLOYEE INITIALIZATION ERROR:', error);
+          });
+        }, 1000);
       } else {
-        // Already in correct state, just mark as initialized
-        setIsInitialized(true);
+        console.log('✅ EMPLOYEE INITIALIZATION: No auto-pause needed, employee already in correct state');
       }
-    };
-
-    // Only run if we have the toggle function available and not yet initialized
-    if (typeof handleTogglePause === 'function' && !isInitialized && currentEmployee) {
-      initializeEmployeePauseState();
     }
-  }, [currentEmployee, handleTogglePause, isInitialized]);
+  }, [currentEmployee, handleTogglePause, initializationComplete]);
 
   const handleLogout = () => {
     dispatch({ type: 'LOGOUT' });
@@ -171,7 +176,8 @@ export default function EmpleadoUser() {
               ) : (
                 <div className="bg-white rounded-2xl shadow-xl p-6">
                   <h2 className="text-2xl font-bold text-gray-800 mb-6">Servicio Actual</h2>
-                  {currentEmployee.isPaused ? (
+                  {/* CRITICAL FIX: Use isActive instead of isPaused for display logic */}
+                  {!currentEmployee.isActive ? (
                     <div className="text-center py-12">
                       <div className="text-6xl mb-4">☕</div>
                       <h3 className="text-2xl font-bold text-gray-800 mb-2">En Pausa</h3>
@@ -198,7 +204,7 @@ export default function EmpleadoUser() {
                       <p className="text-xl text-gray-500">No hay tickets en atención</p>
                       <p className="text-gray-400">
                         {waitingTickets.length > 0 
-                          ? 'Presiona "Reanudar" para tomar el siguiente ticket'
+                          ? 'Esperando asignación automática o presiona "Pausar" para descansar'
                           : 'Esperando nuevos tickets...'
                         }
                       </p>
@@ -225,7 +231,7 @@ export default function EmpleadoUser() {
             <QueueList
               tickets={waitingTickets}
               currentTicket={currentTicket}
-              isPaused={currentEmployee.isPaused}
+              isPaused={!currentEmployee.isActive} // CRITICAL FIX: Use !isActive instead of isPaused
               onStartService={handleStartService}
             />
           </div>
@@ -253,7 +259,7 @@ export default function EmpleadoUser() {
         currentUser={currentUser}
         currentEmployee={currentEmployee}
         isConnected={state.isFirebaseConnected}
-        isPaused={currentEmployee.isPaused}
+        isPaused={!currentEmployee.isActive} // CRITICAL FIX: Use !isActive instead of isPaused
         hasCurrentTicket={!!currentTicket}
         onLogout={handleLogout}
         onTogglePause={handleTogglePause}

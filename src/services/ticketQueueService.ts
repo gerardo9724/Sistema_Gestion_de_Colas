@@ -109,22 +109,23 @@ export const ticketQueueService = {
       const recentPerformance = employee.totalTicketsServed;
       workloadScore += Math.floor(recentPerformance / 10); // Every 10 tickets adds 1 point
 
-      // Factor 4: Pause status
-      if (employee.isPaused) {
-        workloadScore += 1000; // Paused employees get very high score (unavailable)
-      }
-
-      // Factor 5: Active status
+      // CRITICAL FIX: Use isActive instead of isPaused for workload calculation
+      // Factor 4: Active status (primary factor)
       if (!employee.isActive) {
         workloadScore += 2000; // Inactive employees get highest score (unavailable)
+      }
+
+      // Factor 5: Pause status (secondary factor, should align with isActive)
+      if (employee.isPaused) {
+        workloadScore += 1000; // Paused employees get very high score (unavailable)
       }
 
       console.log(`📊 WORKLOAD CALCULATION for ${employee.name}:`, {
         currentTicket: employee.currentTicketId ? 100 : 0,
         personalQueueCount: personalQueue.length,
         personalQueueScore: personalQueue.length * 10,
-        isPaused: employee.isPaused ? 1000 : 0,
         isActive: employee.isActive ? 0 : 2000,
+        isPaused: employee.isPaused ? 1000 : 0,
         totalScore: workloadScore
       });
 
@@ -140,7 +141,7 @@ export const ticketQueueService = {
     try {
       const allEmployees = await employeeService.getAllEmployees();
       
-      // Filter to only active employees
+      // CRITICAL FIX: Filter to only active employees (isActive: true)
       const activeEmployees = allEmployees.filter(emp => emp.isActive);
       
       if (activeEmployees.length === 0) {
@@ -230,11 +231,11 @@ export const ticketQueueService = {
         assignedToEmployee: undefined,
       });
 
-      // Update employee with current ticket
+      // CRITICAL FIX: Update employee with current ticket and ensure proper isActive/isPaused state
       await employeeService.updateEmployee(bestEmployee.id, {
-        ...bestEmployee,
         currentTicketId: ticketId,
-        isPaused: false
+        isActive: true,    // CRITICAL: Employee becomes active when serving
+        isPaused: false    // CRITICAL: Employee is not paused when serving
       });
 
       console.log(`✅ AUTO-ASSIGN: Ticket ${ticket.number} successfully assigned to ${bestEmployee.name}`);
@@ -284,18 +285,17 @@ export const ticketQueueService = {
         sourceEmployee: { id: sourceEmployee.id, name: sourceEmployee.name }
       });
 
-      // CRITICAL FIX: IMMEDIATELY clear the source employee's current ticket and pause them
-      // This ensures they can continue with other tickets right away
+      // CRITICAL FIX: IMMEDIATELY clear the source employee's current ticket and set to inactive/paused
       await employeeService.updateEmployee(fromEmployeeId, {
-        ...sourceEmployee,
         currentTicketId: undefined, // CRITICAL: Clear current ticket immediately
-        isPaused: true // CRITICAL: Pause to prevent auto-assignment until they resume
+        isActive: false,            // CRITICAL: Set to inactive
+        isPaused: true              // CRITICAL: Set to paused
       });
 
-      console.log('✅ DERIVATION: Source employee IMMEDIATELY cleared and ready for other tickets');
+      console.log('✅ DERIVATION: Source employee IMMEDIATELY cleared and set to inactive/paused');
 
       // Check if target employee is available for immediate assignment
-      if (!targetEmployee.currentTicketId && !targetEmployee.isPaused) {
+      if (!targetEmployee.currentTicketId && targetEmployee.isActive) {
         console.log('🎯 DERIVATION: Target employee available - IMMEDIATE ASSIGNMENT');
         
         // IMMEDIATE ASSIGNMENT: Employee is free, assign directly
@@ -315,11 +315,11 @@ export const ticketQueueService = {
           assignedToEmployee: undefined, // Clear assignment when being served
         });
 
-        // Update target employee to show they're now serving this ticket
+        // CRITICAL FIX: Update target employee to show they're now serving this ticket
         await employeeService.updateEmployee(toEmployeeId, {
-          ...targetEmployee,
           currentTicketId: ticketId,
-          isPaused: false
+          isActive: true,    // CRITICAL: Employee becomes active when serving
+          isPaused: false    // CRITICAL: Employee is not paused when serving
         });
 
         console.log('✅ DERIVATION: Immediate assignment completed successfully');
@@ -359,7 +359,7 @@ export const ticketQueueService = {
       console.log('📝 DERIVATION: Derivation record created successfully');
       
       // CRITICAL SUCCESS: Source employee is now FREE to continue with other tickets
-      console.log('🎉 DERIVATION COMPLETE: Source employee can now continue with other tickets immediately');
+      console.log('🎉 DERIVATION COMPLETE: Source employee set to inactive/paused state');
 
     } catch (error) {
       console.error('❌ DERIVATION ERROR:', error);
@@ -393,14 +393,14 @@ export const ticketQueueService = {
         throw new Error('Source employee not found');
       }
 
-      // CRITICAL FIX: IMMEDIATELY clear source employee and pause them
+      // CRITICAL FIX: IMMEDIATELY clear source employee and set to inactive/paused
       await employeeService.updateEmployee(fromEmployeeId, {
-        ...sourceEmployee,
         currentTicketId: undefined, // CRITICAL: Clear current ticket immediately
-        isPaused: true // CRITICAL: Pause to prevent auto-assignment until they resume
+        isActive: false,            // CRITICAL: Set to inactive
+        isPaused: true              // CRITICAL: Set to paused
       });
 
-      console.log('✅ QUEUE DERIVATION: Source employee IMMEDIATELY cleared and ready for other tickets');
+      console.log('✅ QUEUE DERIVATION: Source employee IMMEDIATELY cleared and set to inactive/paused');
 
       // CRITICAL FIX: Return ticket to general queue with proper status
       await ticketService.updateTicket(ticketId, {
@@ -427,7 +427,7 @@ export const ticketQueueService = {
       });
 
       console.log('✅ QUEUE DERIVATION: Ticket returned to general queue successfully');
-      console.log('🎉 QUEUE DERIVATION COMPLETE: Source employee can now continue with other tickets immediately');
+      console.log('🎉 QUEUE DERIVATION COMPLETE: Source employee set to inactive/paused state');
 
     } catch (error) {
       console.error('❌ QUEUE DERIVATION ERROR:', error);
@@ -449,9 +449,9 @@ export const ticketQueueService = {
         return null;
       }
 
-      // CRITICAL: Check all conditions before proceeding
-      if (employee.isPaused) {
-        console.log('⏸️ AUTO-ASSIGN: Employee is paused, skipping auto-assignment');
+      // CRITICAL FIX: Check all conditions before proceeding using isActive
+      if (!employee.isActive) {
+        console.log('⏸️ AUTO-ASSIGN: Employee is inactive, skipping auto-assignment');
         return null;
       }
 
@@ -489,11 +489,11 @@ export const ticketQueueService = {
         assignedToEmployee: undefined, // Clear personal assignment when being served
       });
 
-      // Update employee with current ticket
+      // CRITICAL FIX: Update employee with current ticket and proper isActive/isPaused state
       await employeeService.updateEmployee(employeeId, {
-        ...employee,
         currentTicketId: nextTicket.id,
-        isPaused: false // CRITICAL: Ensure employee is not paused when serving
+        isActive: true,    // CRITICAL: Ensure employee is active when serving
+        isPaused: false    // CRITICAL: Ensure employee is not paused when serving
       });
 
       console.log('✅ AUTO-ASSIGN: Ticket assigned successfully');
