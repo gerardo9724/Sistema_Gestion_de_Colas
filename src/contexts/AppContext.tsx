@@ -256,6 +256,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.isFirebaseConnected]);
 
+  // CRITICAL NEW: Monitor for new tickets and auto-assign to available employees
+  useEffect(() => {
+    if (!state.isFirebaseConnected || state.tickets.length === 0) return;
+
+    // Get the most recent ticket
+    const sortedTickets = [...state.tickets].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    
+    const latestTicket = sortedTickets[0];
+    
+    // Check if this is a new ticket that needs auto-assignment
+    if (latestTicket && 
+        latestTicket.status === 'waiting' && 
+        latestTicket.queueType === 'general' && 
+        !latestTicket.assignedToEmployee) {
+      
+      // Check if this ticket was created very recently (within last 5 seconds)
+      const timeSinceCreation = new Date().getTime() - new Date(latestTicket.createdAt).getTime();
+      
+      if (timeSinceCreation < 5000) { // 5 seconds
+        console.log('🆕 NEW TICKET DETECTED: Attempting auto-assignment', {
+          ticketId: latestTicket.id,
+          ticketNumber: latestTicket.number,
+          timeSinceCreation: `${timeSinceCreation}ms`
+        });
+
+        // Attempt auto-assignment with workload balancing
+        const attemptAutoAssignment = async () => {
+          try {
+            const assigned = await ticketQueueService.autoAssignNewTicket(latestTicket.id);
+            if (assigned) {
+              console.log(`✅ AUTO-ASSIGNMENT SUCCESS: Ticket ${latestTicket.number} assigned automatically`);
+            } else {
+              console.log(`📭 AUTO-ASSIGNMENT: No employees available for ticket ${latestTicket.number}`);
+            }
+          } catch (error) {
+            console.error('❌ AUTO-ASSIGNMENT ERROR:', error);
+          }
+        };
+
+        // Small delay to ensure all state updates are complete
+        setTimeout(attemptAutoAssignment, 1000);
+      }
+    }
+  }, [state.tickets, state.isFirebaseConnected]);
+
   // Check computer profile and auto-assign if configured
   const checkComputerProfile = async () => {
     if (!state.isFirebaseConnected) return;
@@ -388,7 +435,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Create ticket function with automatic printing
+  // Create ticket function with automatic printing and auto-assignment
   const createTicket = async (serviceType: string, serviceSubtype?: string): Promise<Ticket> => {
     if (!state.isFirebaseConnected) {
       throw new Error('No connection to Firebase');
@@ -398,8 +445,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_ERROR', payload: null });
 
     try {
+      console.log('🎫 CREATING NEW TICKET:', { serviceType, serviceSubtype });
+      
       const newTicket = await ticketService.createTicket(serviceType, serviceSubtype);
       dispatch({ type: 'ADD_TICKET', payload: newTicket });
+
+      console.log('✅ TICKET CREATED:', {
+        id: newTicket.id,
+        number: newTicket.number,
+        serviceType: newTicket.serviceType,
+        status: newTicket.status
+      });
 
       // Auto-print ticket if enabled
       if (state.printSettings.enablePrint) {
@@ -417,14 +473,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           );
 
           if (printSuccess) {
-            console.log(`Ticket ${newTicket.number} printed successfully`);
+            console.log(`🖨️ PRINT SUCCESS: Ticket ${newTicket.number} printed successfully`);
           } else {
-            console.warn(`Failed to print ticket ${newTicket.number}`);
+            console.warn(`⚠️ PRINT WARNING: Failed to print ticket ${newTicket.number}`);
           }
         } catch (printError) {
-          console.error('Print error:', printError);
+          console.error('❌ PRINT ERROR:', printError);
           // Don't throw print errors, just log them
         }
+      }
+
+      // CRITICAL NEW: Attempt immediate auto-assignment to available employees
+      console.log('🤖 ATTEMPTING AUTO-ASSIGNMENT for new ticket...');
+      
+      try {
+        const autoAssigned = await ticketQueueService.autoAssignNewTicket(newTicket.id);
+        if (autoAssigned) {
+          console.log(`🎯 AUTO-ASSIGNMENT SUCCESS: Ticket ${newTicket.number} assigned immediately`);
+        } else {
+          console.log(`📭 AUTO-ASSIGNMENT: No employees available, ticket ${newTicket.number} remains in queue`);
+        }
+      } catch (autoAssignError) {
+        console.error('❌ AUTO-ASSIGNMENT ERROR:', autoAssignError);
+        // Don't throw auto-assignment errors, ticket creation was successful
       }
 
       return newTicket;

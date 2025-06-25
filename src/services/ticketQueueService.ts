@@ -86,6 +86,155 @@ export const ticketQueueService = {
     }
   },
 
+  // NEW: Calculate employee workload score for load balancing
+  async calculateEmployeeWorkload(employee: Employee): Promise<number> {
+    try {
+      let workloadScore = 0;
+
+      // Factor 1: Current ticket (highest weight)
+      if (employee.currentTicketId) {
+        workloadScore += 100; // Employee is busy
+      }
+
+      // Factor 2: Personal queue count
+      const personalQueue = await this.getPersonalQueue(employee.id);
+      workloadScore += personalQueue.length * 10; // Each ticket in personal queue adds 10 points
+
+      // Factor 3: Recent performance (tickets served today)
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      
+      // This would ideally come from a more detailed query, but for now we'll use total served
+      // In a real implementation, you'd query tickets served today
+      const recentPerformance = employee.totalTicketsServed;
+      workloadScore += Math.floor(recentPerformance / 10); // Every 10 tickets adds 1 point
+
+      // Factor 4: Pause status
+      if (employee.isPaused) {
+        workloadScore += 1000; // Paused employees get very high score (unavailable)
+      }
+
+      // Factor 5: Active status
+      if (!employee.isActive) {
+        workloadScore += 2000; // Inactive employees get highest score (unavailable)
+      }
+
+      console.log(`📊 WORKLOAD CALCULATION for ${employee.name}:`, {
+        currentTicket: employee.currentTicketId ? 100 : 0,
+        personalQueueCount: personalQueue.length,
+        personalQueueScore: personalQueue.length * 10,
+        isPaused: employee.isPaused ? 1000 : 0,
+        isActive: employee.isActive ? 0 : 2000,
+        totalScore: workloadScore
+      });
+
+      return workloadScore;
+    } catch (error) {
+      console.error('Error calculating employee workload:', error);
+      return 9999; // Return high score on error to avoid assignment
+    }
+  },
+
+  // NEW: Find best available employee based on workload
+  async findBestAvailableEmployee(): Promise<Employee | null> {
+    try {
+      const allEmployees = await employeeService.getAllEmployees();
+      
+      // Filter to only active employees
+      const activeEmployees = allEmployees.filter(emp => emp.isActive);
+      
+      if (activeEmployees.length === 0) {
+        console.log('📭 AUTO-ASSIGN: No active employees available');
+        return null;
+      }
+
+      // Calculate workload for each employee
+      const employeeWorkloads = await Promise.all(
+        activeEmployees.map(async (employee) => ({
+          employee,
+          workload: await this.calculateEmployeeWorkload(employee)
+        }))
+      );
+
+      // Sort by workload (lowest first = least busy)
+      employeeWorkloads.sort((a, b) => a.workload - b.workload);
+
+      console.log('🎯 WORKLOAD RANKING:', employeeWorkloads.map(ew => ({
+        name: ew.employee.name,
+        workload: ew.workload,
+        available: ew.workload < 100 // Less than 100 means available
+      })));
+
+      // Find the employee with the lowest workload who is actually available
+      const bestEmployee = employeeWorkloads.find(ew => ew.workload < 100); // Less than 100 means available
+
+      if (bestEmployee) {
+        console.log(`✅ BEST EMPLOYEE FOUND: ${bestEmployee.employee.name} (workload: ${bestEmployee.workload})`);
+        return bestEmployee.employee;
+      }
+
+      console.log('⏳ AUTO-ASSIGN: All employees are busy, no immediate assignment possible');
+      return null;
+    } catch (error) {
+      console.error('Error finding best available employee:', error);
+      return null;
+    }
+  },
+
+  // ENHANCED: Auto-assign new ticket to best available employee
+  async autoAssignNewTicket(ticketId: string): Promise<boolean> {
+    try {
+      console.log('🚀 AUTO-ASSIGN NEW TICKET: Starting workload-based assignment for ticket', ticketId);
+
+      // Find the best available employee
+      const bestEmployee = await this.findBestAvailableEmployee();
+      
+      if (!bestEmployee) {
+        console.log('📭 AUTO-ASSIGN: No employees available for immediate assignment');
+        return false;
+      }
+
+      console.log(`🎯 AUTO-ASSIGN: Assigning ticket ${ticketId} to ${bestEmployee.name}`);
+
+      // Get the ticket to calculate wait time
+      const allTickets = await ticketService.getAllTickets();
+      const ticket = allTickets.find(t => t.id === ticketId);
+      
+      if (!ticket) {
+        console.log('❌ AUTO-ASSIGN: Ticket not found');
+        return false;
+      }
+
+      // Calculate wait time
+      const waitTime = Math.floor((new Date().getTime() - ticket.createdAt.getTime()) / 1000);
+      const now = new Date();
+      
+      // Assign ticket to the best employee
+      await ticketService.updateTicket(ticketId, {
+        status: 'being_served',
+        servedBy: bestEmployee.id,
+        servedAt: now,
+        waitTime,
+        queueType: undefined,
+        assignedToEmployee: undefined,
+      });
+
+      // Update employee with current ticket
+      await employeeService.updateEmployee(bestEmployee.id, {
+        ...bestEmployee,
+        currentTicketId: ticketId,
+        isPaused: false
+      });
+
+      console.log(`✅ AUTO-ASSIGN: Ticket ${ticket.number} successfully assigned to ${bestEmployee.name}`);
+      return true;
+
+    } catch (error) {
+      console.error('❌ AUTO-ASSIGN ERROR:', error);
+      return false;
+    }
+  },
+
   // FIXED: Derive ticket to another employee with proper assignment
   async deriveTicketToEmployee(
     ticketId: string, 
