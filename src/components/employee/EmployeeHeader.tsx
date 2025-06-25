@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useMemo } from 'react';
-import { LogOut, Play, Pause, Clock, Wifi, WifiOff, Bug } from 'lucide-react';
+import { LogOut, Play, Pause, Clock, Wifi, WifiOff } from 'lucide-react';
 import type { User, Employee } from '../../types';
 
 interface EmployeeHeaderProps {
@@ -171,19 +171,6 @@ export default function EmployeeHeader({
     return 'Pausar atención';
   }, [isConnected, hasCurrentTicket, buttonState.shouldShowResume]);
 
-  // CRITICAL NEW: Debug state for validation
-  const debugState = useMemo(() => {
-    return {
-      dbIsActive: currentEmployee.isActive,
-      dbIsPaused: currentEmployee.isPaused,
-      propIsPaused: isPaused,
-      hasTicket: hasCurrentTicket,
-      buttonAction: buttonState.shouldShowResume ? 'RESUME' : 'PAUSE',
-      isConsistent: currentEmployee.isActive === !isPaused,
-      timestamp: new Date().toLocaleTimeString()
-    };
-  }, [currentEmployee.isActive, currentEmployee.isPaused, isPaused, hasCurrentTicket, buttonState.shouldShowResume]);
-
   return (
     <div className="bg-white bg-opacity-90 backdrop-blur-sm shadow-lg">
       <div className="max-w-7xl mx-auto px-6 py-4">
@@ -203,43 +190,6 @@ export default function EmployeeHeader({
           <div className="flex items-center space-x-4">
             <div className="text-lg text-gray-600">
               {new Date().toLocaleTimeString()}
-            </div>
-            
-            {/* CRITICAL NEW: DEBUG STATE LABEL - TEMPORARY FOR VALIDATION */}
-            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg px-3 py-2 shadow-md">
-              <div className="flex items-center space-x-2 mb-1">
-                <Bug size={16} className="text-yellow-600" />
-                <span className="text-xs font-bold text-yellow-800">DEBUG - Estado DB</span>
-              </div>
-              <div className="text-xs space-y-1">
-                <div className="flex justify-between space-x-2">
-                  <span className="text-yellow-700">isActive:</span>
-                  <span className={`font-bold ${debugState.dbIsActive ? 'text-green-600' : 'text-red-600'}`}>
-                    {debugState.dbIsActive ? 'TRUE' : 'FALSE'}
-                  </span>
-                </div>
-                <div className="flex justify-between space-x-2">
-                  <span className="text-yellow-700">isPaused:</span>
-                  <span className={`font-bold ${debugState.dbIsPaused ? 'text-red-600' : 'text-green-600'}`}>
-                    {debugState.dbIsPaused ? 'TRUE' : 'FALSE'}
-                  </span>
-                </div>
-                <div className="flex justify-between space-x-2">
-                  <span className="text-yellow-700">Botón:</span>
-                  <span className={`font-bold ${debugState.buttonAction === 'RESUME' ? 'text-green-600' : 'text-orange-600'}`}>
-                    {debugState.buttonAction}
-                  </span>
-                </div>
-                <div className="flex justify-between space-x-2">
-                  <span className="text-yellow-700">Consistente:</span>
-                  <span className={`font-bold ${debugState.isConsistent ? 'text-green-600' : 'text-red-600'}`}>
-                    {debugState.isConsistent ? 'SÍ' : 'NO'}
-                  </span>
-                </div>
-                <div className="text-center text-yellow-600 text-xs border-t border-yellow-300 pt-1">
-                  {debugState.timestamp}
-                </div>
-              </div>
             </div>
             
             {/* Connection Status */}
