@@ -8,9 +8,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
   const { state, deriveTicketToEmployee, deriveTicketToQueue, autoAssignNextTicket } = useApp();
   const [isLoading, setIsLoading] = useState(false);
   
-  // CRITICAL FIX: Add debounce control for toggle pause to prevent database overflow
-  const togglePauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastToggleTimeRef = useRef<number>(0);
+  // CRITICAL FIX: Simplify debounce control - remove complex tracking
   const isToggleInProgressRef = useRef<boolean>(false);
 
   const currentEmployee = state.employees.find(e => e.id === employeeId);
@@ -196,23 +194,13 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // CRITICAL FIX: Debounced toggle pause function with overflow protection
+  // CRITICAL FIX: Simplified toggle pause function without complex debouncing
   const handleTogglePause = useCallback(async () => {
-    console.log('🔄 TOGGLE PAUSE: Function called with debounce protection');
+    console.log('🔄 TOGGLE PAUSE: Starting simplified toggle process');
     
-    // CRITICAL: Prevent multiple simultaneous executions
+    // CRITICAL: Basic protection against multiple simultaneous executions
     if (isToggleInProgressRef.current) {
-      console.log('🚫 TOGGLE PAUSE: Already in progress, ignoring duplicate call');
-      return;
-    }
-
-    // CRITICAL: Implement debounce - minimum 2 seconds between calls
-    const now = Date.now();
-    const timeSinceLastToggle = now - lastToggleTimeRef.current;
-    const DEBOUNCE_DELAY = 2000; // 2 seconds
-
-    if (timeSinceLastToggle < DEBOUNCE_DELAY) {
-      console.log(`🚫 TOGGLE PAUSE: Debounced - ${DEBOUNCE_DELAY - timeSinceLastToggle}ms remaining`);
+      console.log('🚫 TOGGLE PAUSE: Already in progress, ignoring call');
       return;
     }
 
@@ -236,63 +224,44 @@ export function useEmployeeTicketManagement(employeeId: string) {
       return;
     }
 
-    // CRITICAL: Set execution flags to prevent overflow
+    // CRITICAL: Set execution flag
     isToggleInProgressRef.current = true;
-    lastToggleTimeRef.current = now;
     setIsLoading(true);
 
-    console.log('👤 TOGGLE PAUSE: Starting controlled execution', {
+    console.log('👤 TOGGLE PAUSE: Starting execution', {
       employeeId,
       employeeName: currentEmployee.name,
       currentPauseState: currentEmployee.isPaused,
-      currentActiveState: currentEmployee.isActive,
-      timeSinceLastToggle: `${timeSinceLastToggle}ms`
+      currentActiveState: currentEmployee.isActive
     });
 
     try {
       const newPauseState = !currentEmployee.isPaused;
-      const newActiveState = !newPauseState;
       
       console.log(`🔄 TOGGLE PAUSE: State transition`, {
         from: { isPaused: currentEmployee.isPaused, isActive: currentEmployee.isActive },
-        to: { isPaused: newPauseState, isActive: newActiveState },
-        action: newPauseState ? 'PAUSING (DEACTIVATING)' : 'RESUMING (ACTIVATING)'
+        to: { isPaused: newPauseState, isActive: currentEmployee.isActive },
+        action: newPauseState ? 'PAUSING' : 'RESUMING'
       });
       
-      // CRITICAL: Create complete update with all required fields
-      const completeUpdateData = {
-        name: currentEmployee.name,
-        position: currentEmployee.position,
-        isActive: newActiveState,
-        currentTicketId: currentEmployee.currentTicketId || undefined,
-        totalTicketsServed: currentEmployee.totalTicketsServed || 0,
-        totalTicketsCancelled: currentEmployee.totalTicketsCancelled || 0,
-        isPaused: newPauseState,
-        userId: currentEmployee.userId || undefined,
-        createdAt: currentEmployee.createdAt
+      // CRITICAL FIX: Simple update with only the necessary fields
+      const updateData = {
+        isPaused: newPauseState
       };
 
-      console.log('💾 TOGGLE PAUSE: Sending controlled update to Firebase:', {
+      console.log('💾 TOGGLE PAUSE: Sending simple update to Firebase:', {
         employeeId,
-        criticalFields: {
-          isPaused: `${currentEmployee.isPaused} → ${newPauseState}`,
-          isActive: `${currentEmployee.isActive} → ${newActiveState}`
-        }
+        updateData
       });
 
-      // CRITICAL: Single database call with timeout protection
-      const updatePromise = employeeService.updateEmployee(employeeId, completeUpdateData);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Database update timeout')), 10000);
-      });
-
-      await Promise.race([updatePromise, timeoutPromise]);
+      // CRITICAL: Direct database call without complex timeout handling
+      await employeeService.updateEmployee(employeeId, updateData);
 
       console.log(`✅ TOGGLE PAUSE: Database update completed successfully`);
 
       // CRITICAL: Handle post-update logic
       if (currentEmployee.isPaused && !newPauseState) {
-        console.log('🎯 RESUME: Employee resuming and becoming ACTIVE');
+        console.log('🎯 RESUME: Employee resuming');
         
         // Try auto-assignment after a delay
         setTimeout(async () => {
@@ -307,14 +276,14 @@ export function useEmployeeTicketManagement(employeeId: string) {
           } catch (error) {
             console.error('❌ RESUME ERROR:', error);
           }
-        }, 1500);
+        }, 1000);
         
       } else if (!currentEmployee.isPaused && newPauseState) {
         console.log('⏸️ PAUSE: Employee paused successfully');
       }
       
     } catch (error) {
-      console.error('❌ TOGGLE PAUSE CRITICAL ERROR:', error);
+      console.error('❌ TOGGLE PAUSE ERROR:', error);
       
       let errorMessage = 'Error al cambiar estado de pausa';
       if (error instanceof Error) {
@@ -324,43 +293,16 @@ export function useEmployeeTicketManagement(employeeId: string) {
       alert(`Error: ${errorMessage}`);
       
     } finally {
-      // CRITICAL: Always reset flags and loading state
+      // CRITICAL: Always reset flags
       setIsLoading(false);
       
-      // CRITICAL: Reset execution flag after a delay to prevent rapid successive calls
+      // Reset execution flag after a short delay
       setTimeout(() => {
         isToggleInProgressRef.current = false;
-        console.log('🔓 TOGGLE PAUSE: Execution flag reset, ready for next call');
-      }, 1000);
+        console.log('🔓 TOGGLE PAUSE: Execution flag reset');
+      }, 500);
     }
   }, [currentEmployee, employeeId, currentTicket, autoAssignNextTicket]);
-
-  // CRITICAL: Cleanup timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (togglePauseTimeoutRef.current) {
-        clearTimeout(togglePauseTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // CRITICAL: Debug logging with controlled frequency
-  useEffect(() => {
-    const debugInterval = setInterval(() => {
-      console.log('🔧 HOOK STATE DEBUG:', {
-        employeeId,
-        currentEmployeeExists: !!currentEmployee,
-        currentEmployeeName: currentEmployee?.name,
-        currentEmployeeActive: currentEmployee?.isActive,
-        currentEmployeePaused: currentEmployee?.isPaused,
-        toggleInProgress: isToggleInProgressRef.current,
-        lastToggleTime: lastToggleTimeRef.current,
-        hookIsReady: !!currentEmployee && typeof handleTogglePause === 'function'
-      });
-    }, 10000); // Log every 10 seconds instead of on every render
-
-    return () => clearInterval(debugInterval);
-  }, [employeeId, currentEmployee, handleTogglePause]);
 
   return {
     currentTicket,

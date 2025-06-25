@@ -40,10 +40,6 @@ const convertFirestoreEmployee = (doc: any): Employee => {
   };
 };
 
-// CRITICAL FIX: Add request tracking to prevent database overflow
-const updateRequestTracker = new Map<string, number>();
-const UPDATE_DEBOUNCE_DELAY = 1000; // 1 second minimum between updates for same employee
-
 export const employeeService = {
   // Get all employees
   async getAllEmployees(): Promise<Employee[]> {
@@ -91,39 +87,12 @@ export const employeeService = {
     }
   },
 
-  // CRITICAL FIX: Enhanced update employee with debounce protection
+  // CRITICAL FIX: Simplified update employee function
   async updateEmployee(employeeId: string, updates: Partial<Employee>): Promise<void> {
     try {
-      // CRITICAL: Implement debounce to prevent database overflow
-      const now = Date.now();
-      const lastUpdateTime = updateRequestTracker.get(employeeId) || 0;
-      const timeSinceLastUpdate = now - lastUpdateTime;
-      
-      if (timeSinceLastUpdate < UPDATE_DEBOUNCE_DELAY) {
-        console.log(`⏱️ EMPLOYEE SERVICE: Update debounced for employee ${employeeId}`, {
-          timeSinceLastUpdate: `${timeSinceLastUpdate}ms`,
-          debounceDelay: `${UPDATE_DEBOUNCE_DELAY}ms`,
-          remainingTime: `${UPDATE_DEBOUNCE_DELAY - timeSinceLastUpdate}ms`
-        });
-        
-        // CRITICAL: For pause state changes, we must proceed despite debounce
-        // to ensure UI state matches database state
-        const isPauseStateChange = updates.isPaused !== undefined;
-        if (!isPauseStateChange) {
-          throw new Error(`Demasiadas solicitudes. Intente nuevamente en ${Math.ceil((UPDATE_DEBOUNCE_DELAY - timeSinceLastUpdate)/1000)} segundos.`);
-        }
-      }
-      
-      // Update the tracker immediately
-      updateRequestTracker.set(employeeId, now);
-      
       console.log('💾 EMPLOYEE SERVICE: Starting update operation', {
         employeeId,
-        updateKeys: Object.keys(updates),
-        criticalFields: {
-          isPaused: updates.isPaused,
-          isActive: updates.isActive
-        }
+        updateKeys: Object.keys(updates)
       });
 
       if (!employeeId) {
@@ -133,19 +102,6 @@ export const employeeService = {
       const employeeRef = doc(db, 'employees', employeeId);
       const updateData: any = { ...updates };
       
-      // Validate required fields
-      const requiredFields = ['name', 'position'];
-      const missingFields = requiredFields.filter(field => 
-        updateData[field] === undefined
-      );
-      
-      if (missingFields.length > 0) {
-        console.warn('⚠️ EMPLOYEE SERVICE: Missing fields in update', {
-          missingFields,
-          providedFields: Object.keys(updateData)
-        });
-      }
-
       // Convert undefined to null for Firestore
       Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {
@@ -161,13 +117,8 @@ export const employeeService = {
         finalUpdateData: updateData
       });
 
-      // CRITICAL: Add timeout protection for Firebase update
-      const updatePromise = updateDoc(employeeRef, updateData);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout: Database update took too long')), 10000);
-      });
-
-      await Promise.race([updatePromise, timeoutPromise]);
+      // Direct update without complex timeout handling
+      await updateDoc(employeeRef, updateData);
       
       console.log('✅ EMPLOYEE SERVICE: Firebase update completed successfully', {
         employeeId,
@@ -190,19 +141,7 @@ export const employeeService = {
       
       // Provide specific error information
       if (error instanceof Error) {
-        if (error.message.includes('Demasiadas solicitudes')) {
-          throw error; // Pass through debounce errors
-        } else if (error.message.includes('permission')) {
-          throw new Error(`Permisos insuficientes para actualizar empleado: ${error.message}`);
-        } else if (error.message.includes('not-found')) {
-          throw new Error(`Empleado no encontrado: ${employeeId}`);
-        } else if (error.message.includes('network')) {
-          throw new Error(`Error de conexión: ${error.message}`);
-        } else if (error.message.includes('Timeout')) {
-          throw new Error(`Tiempo de espera agotado: ${error.message}`);
-        } else {
-          throw new Error(`Error al actualizar empleado: ${error.message}`);
-        }
+        throw new Error(`Error al actualizar empleado: ${error.message}`);
       } else {
         throw new Error('Error desconocido al actualizar empleado');
       }

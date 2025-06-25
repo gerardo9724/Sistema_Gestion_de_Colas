@@ -22,25 +22,14 @@ export default function EmployeeHeader({
   onTogglePause
 }: EmployeeHeaderProps) {
   
-  // CRITICAL FIX: Add button click protection to prevent rapid successive clicks
-  const lastClickTimeRef = useRef<number>(0);
+  // CRITICAL FIX: Simplified click protection
   const isClickInProgressRef = useRef<boolean>(false);
 
-  // CRITICAL FIX: Debounced click handler with comprehensive protection
+  // CRITICAL FIX: Simplified click handler
   const handleTogglePauseClick = useCallback(async () => {
-    console.log('🔘 HEADER BUTTON CLICKED: Starting protected toggle pause process');
+    console.log('🔘 HEADER BUTTON CLICKED: Starting toggle pause');
 
-    // CRITICAL: Prevent rapid successive clicks
-    const now = Date.now();
-    const timeSinceLastClick = now - lastClickTimeRef.current;
-    const CLICK_DEBOUNCE_DELAY = 3000; // 3 seconds between clicks
-
-    if (timeSinceLastClick < CLICK_DEBOUNCE_DELAY) {
-      console.log(`🚫 CLICK DEBOUNCED: ${CLICK_DEBOUNCE_DELAY - timeSinceLastClick}ms remaining`);
-      return;
-    }
-
-    // CRITICAL: Prevent multiple simultaneous executions
+    // CRITICAL: Basic protection against rapid clicks
     if (isClickInProgressRef.current) {
       console.log('🚫 CLICK BLOCKED: Already in progress');
       return;
@@ -66,20 +55,14 @@ export default function EmployeeHeader({
       return;
     }
 
-    // CRITICAL: Set protection flags
+    // CRITICAL: Set protection flag
     isClickInProgressRef.current = true;
-    lastClickTimeRef.current = now;
 
     try {
-      console.log('🚀 EXECUTING PROTECTED TOGGLE PAUSE');
+      console.log('🚀 EXECUTING TOGGLE PAUSE');
       
-      // CRITICAL: Add timeout protection for the function call
-      const togglePromise = onTogglePause();
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout: La operación tardó demasiado')), 15000);
-      });
-
-      await Promise.race([togglePromise, timeoutPromise]);
+      // CRITICAL FIX: Direct function call without complex timeout handling
+      await onTogglePause();
       
       console.log('✅ TOGGLE PAUSE EXECUTED SUCCESSFULLY');
       
@@ -93,11 +76,11 @@ export default function EmployeeHeader({
       
       alert(`Error: ${errorMessage}`);
     } finally {
-      // CRITICAL: Reset click protection after delay
+      // CRITICAL: Reset click protection after short delay
       setTimeout(() => {
         isClickInProgressRef.current = false;
         console.log('🔓 HEADER: Click protection reset');
-      }, 2000);
+      }, 1000);
     }
   }, [onTogglePause, hasCurrentTicket, isConnected]);
 
@@ -139,12 +122,12 @@ export default function EmployeeHeader({
               </div>
             </div>
             
-            {/* CRITICAL FIX: Protected Resume/Pause Button */}
+            {/* CRITICAL FIX: Simplified Resume/Pause Button */}
             <button
               onClick={handleTogglePauseClick}
-              disabled={hasCurrentTicket || !isConnected || isClickInProgressRef.current}
+              disabled={hasCurrentTicket || !isConnected}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-semibold transform relative overflow-hidden ${
-                hasCurrentTicket || !isConnected || isClickInProgressRef.current
+                hasCurrentTicket || !isConnected
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
                   : isPaused 
                     ? 'bg-green-500 hover:bg-green-600 active:bg-green-700 text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl' 
@@ -157,9 +140,6 @@ export default function EmployeeHeader({
                 isPaused ? 'Reanudar y buscar tickets disponibles' : 'Pausar atención'
               }
             >
-              {/* Visual feedback for button press */}
-              <div className="absolute inset-0 bg-white opacity-0 group-active:opacity-20 transition-opacity duration-150"></div>
-              
               {/* CRITICAL: Show loading state when processing */}
               {isClickInProgressRef.current ? (
                 <>
@@ -176,11 +156,6 @@ export default function EmployeeHeader({
                   <Pause size={20} />
                   <span>Pausar</span>
                 </>
-              )}
-              
-              {/* Connection indicator */}
-              {!isConnected && (
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
               )}
             </button>
             
