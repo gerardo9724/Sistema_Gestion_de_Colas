@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CheckCircle, SkipForward, X, Timer, Play, Pause, ArrowRight, Volume2 } from 'lucide-react';
 import type { Ticket } from '../../types';
 
@@ -23,10 +23,38 @@ export default function CurrentTicketCard({
   onDeriveTicket,
   onRecallTicket
 }: CurrentTicketCardProps) {
+  // Estado para controlar si el recall está en proceso
+  const [isRecalling, setIsRecalling] = useState(false);
+
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Función controlada para el recall
+  const handleRecallClick = async () => {
+    // Prevenir múltiples ejecuciones
+    if (isRecalling) {
+      console.log('🚫 Recall ya en proceso, ignorando click adicional');
+      return;
+    }
+
+    setIsRecalling(true);
+    
+    try {
+      console.log('🔊 Iniciando recall del ticket...');
+      await onRecallTicket();
+      console.log('✅ Recall completado exitosamente');
+    } catch (error) {
+      console.error('❌ Error en recall:', error);
+    } finally {
+      // Reactivar el botón después de 2 segundos para evitar spam
+      setTimeout(() => {
+        setIsRecalling(false);
+        console.log('🔓 Botón de recall reactivado');
+      }, 2000);
+    }
   };
 
   return (
@@ -87,18 +115,40 @@ export default function CurrentTicketCard({
               <SkipForward size={24} className="group-active:scale-110 transition-transform duration-150" />
             </button>
             
-            {/* Recall Button con Animación Especial */}
+            {/* Recall Button con Control de Ejecución */}
             <button
-              onClick={onRecallTicket}
-              className="group bg-yellow-500 hover:bg-yellow-600 active:bg-yellow-700 text-white p-4 rounded-xl font-semibold transition-all duration-150 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center justify-center relative overflow-hidden"
-              title="Volver a llamar ticket"
+              onClick={handleRecallClick}
+              disabled={isRecalling}
+              className={`group relative overflow-hidden p-4 rounded-xl font-semibold transition-all duration-150 transform shadow-lg flex items-center justify-center ${
+                isRecalling 
+                  ? 'bg-yellow-300 cursor-not-allowed opacity-75' 
+                  : 'bg-yellow-500 hover:bg-yellow-600 active:bg-yellow-700 hover:scale-105 active:scale-95 hover:shadow-xl'
+              }`}
+              title={isRecalling ? "Llamando..." : "Volver a llamar ticket"}
             >
-              {/* Efecto de ondas al presionar */}
-              <div className="absolute inset-0 bg-white opacity-0 group-active:opacity-20 group-active:animate-ping rounded-xl"></div>
+              {/* Efecto de ondas al presionar - solo si no está en proceso */}
+              {!isRecalling && (
+                <div className="absolute inset-0 bg-white opacity-0 group-active:opacity-20 group-active:animate-ping rounded-xl"></div>
+              )}
+              
+              {/* Indicador de carga cuando está en proceso */}
+              {isRecalling && (
+                <div className="absolute inset-0 bg-yellow-400 opacity-50 animate-pulse rounded-xl"></div>
+              )}
+              
               <Volume2 
                 size={24} 
-                className="group-active:scale-125 group-hover:animate-pulse transition-all duration-150 relative z-10" 
+                className={`relative z-10 text-white transition-all duration-150 ${
+                  isRecalling 
+                    ? 'animate-bounce' 
+                    : 'group-active:scale-125 group-hover:animate-pulse'
+                }`}
               />
+              
+              {/* Contador visual cuando está deshabilitado */}
+              {isRecalling && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
+              )}
             </button>
             
             {/* Derive Button */}
