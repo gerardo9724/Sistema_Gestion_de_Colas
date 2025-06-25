@@ -53,6 +53,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
+  // CRITICAL FIX: Enhanced complete ticket with proper "call next" behavior
   const handleCompleteTicket = async (ticketId: string, callNext: boolean = false) => {
     if (!currentEmployee || !currentTicket) return;
 
@@ -64,6 +65,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
         : 0;
       const totalTime = Math.floor((now.getTime() - currentTicket.createdAt.getTime()) / 1000);
       
+      // Complete the current ticket
       await ticketService.updateTicket(ticketId, {
         status: 'completed',
         completedAt: now,
@@ -71,23 +73,49 @@ export function useEmployeeTicketManagement(employeeId: string) {
         totalTime
       });
 
-      await employeeService.updateEmployee(employeeId, {
-        ...currentEmployee,
-        currentTicketId: undefined,
-        totalTicketsServed: currentEmployee.totalTicketsServed + 1,
-        isPaused: !callNext
-      });
+      console.log(`🎯 COMPLETE TICKET: Completing ticket ${currentTicket.number}, callNext: ${callNext}`);
 
+      // CRITICAL FIX: Handle employee state based on callNext parameter
       if (callNext) {
-        // Auto-assign next ticket
+        console.log('🔄 CALL NEXT: Attempting to auto-assign next ticket...');
+        
+        // First update employee stats but keep them active (not paused)
+        await employeeService.updateEmployee(employeeId, {
+          ...currentEmployee,
+          currentTicketId: undefined,
+          totalTicketsServed: currentEmployee.totalTicketsServed + 1,
+          isPaused: false // CRITICAL: Keep employee ACTIVE for auto-assignment
+        });
+
+        // Try to auto-assign next ticket immediately
         setTimeout(async () => {
           try {
-            await autoAssignNextTicket(employeeId);
+            const assignedTicket = await autoAssignNextTicket(employeeId);
+            if (assignedTicket) {
+              console.log(`✅ CALL NEXT: Auto-assigned ticket ${assignedTicket.number} to ${currentEmployee.name}`);
+            } else {
+              console.log('📭 CALL NEXT: No tickets available, employee remains ACTIVE and ready');
+              // CRITICAL: Employee stays active (not paused) even when no tickets available
+              // This ensures immediate assignment when new tickets arrive
+            }
           } catch (error) {
-            console.error('Error auto-assigning next ticket:', error);
+            console.error('❌ CALL NEXT ERROR: Failed to auto-assign ticket:', error);
+            // Even on error, keep employee active for manual assignment
           }
         }, 500);
+        
+      } else {
+        console.log('⏸️ COMPLETE ONLY: Completing ticket and pausing employee');
+        
+        // Regular completion - pause the employee
+        await employeeService.updateEmployee(employeeId, {
+          ...currentEmployee,
+          currentTicketId: undefined,
+          totalTicketsServed: currentEmployee.totalTicketsServed + 1,
+          isPaused: true // Pause employee for regular completion
+        });
       }
+
     } catch (error) {
       console.error('Error completing ticket:', error);
       alert('Error al completar el ticket');
@@ -170,7 +198,7 @@ export function useEmployeeTicketManagement(employeeId: string) {
     }
   };
 
-  // FIXED: Enhanced toggle pause with auto-assignment logic
+  // ENHANCED: Toggle pause with improved auto-assignment logic
   const handleTogglePause = async () => {
     if (!currentEmployee) return;
 

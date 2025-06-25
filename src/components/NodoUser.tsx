@@ -43,7 +43,7 @@ export default function NodoUser() {
         textColor: state.nodeConfiguration.textColor,
         accentColor: state.nodeConfiguration.accentColor,
         
-        // NEW: Ticket Color Settings
+        // Ticket Color Settings
         ticketBeingServedColor: state.nodeConfiguration.ticketBeingServedColor || '#10B981',
         ticketCompletedColor: state.nodeConfiguration.ticketCompletedColor || '#14B8A6',
         
@@ -84,8 +84,8 @@ export default function NodoUser() {
         headerColor: '#3B82F6',
         textColor: '#1F2937',
         accentColor: '#10B981',
-        ticketBeingServedColor: '#10B981', // Default green
-        ticketCompletedColor: '#14B8A6', // Default teal
+        ticketBeingServedColor: '#10B981',
+        ticketCompletedColor: '#14B8A6',
         enableAnimations: true,
         highlightDuration: 10000,
         transitionDuration: 1000,
@@ -125,17 +125,17 @@ export default function NodoUser() {
     dispatch({ type: 'SET_CURRENT_USER', payload: null });
   };
 
-  // CRITICAL UPDATED: Get ALL tickets (being served AND completed today) for proper display
+  // CRITICAL VALIDATION: Get ALL tickets for display with proper filtering and ordering
   const getAllTicketsForDisplay = () => {
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     
-    // Get being served tickets
+    // VALIDATION 1: Get only being served tickets (not all tickets)
     const beingServedTickets = state.tickets
       .filter(ticket => ticket.status === 'being_served')
       .sort((a, b) => {
-        // CRITICAL: Highlighted ticket (newly called) ALWAYS goes first (top position)
+        // VALIDATION 2: Highlighted ticket (newly called) ALWAYS goes first (top position)
         if (highlightedTicket === a.id && highlightedTicket !== b.id) return -1;
         if (highlightedTicket === b.id && highlightedTicket !== a.id) return 1;
         
@@ -160,10 +160,22 @@ export default function NodoUser() {
         return bTime - aTime; // Most recently completed first
       });
 
-    // CRITICAL: Combine following the scenario ordering:
-    // 1. Being served tickets (with highlighted first)
-    // 2. Today's completed tickets (most recent first)
-    return [...beingServedTickets, ...todaysCompletedTickets];
+    // VALIDATION 3: CRITICAL ordering - being served ALWAYS before completed
+    // AND respect maxTicketsDisplayed limit from NodeConfiguration
+    const combinedTickets = [
+      ...beingServedTickets,     // FIRST: Being served tickets (with highlighted first)
+      ...todaysCompletedTickets  // SECOND: Today's completed tickets (most recent first)
+    ];
+
+    console.log('🎫 NODE DISPLAY: Preparing tickets for display', {
+      beingServedCount: beingServedTickets.length,
+      completedTodayCount: todaysCompletedTickets.length,
+      maxTicketsDisplayed: nodeConfig.maxTicketsDisplayed,
+      totalCombined: combinedTickets.length,
+      willBeLimited: combinedTickets.length > nodeConfig.maxTicketsDisplayed
+    });
+
+    return combinedTickets; // QueueDisplay will apply the maxTicketsDisplayed limit
   };
 
   const allTicketsForDisplay = getAllTicketsForDisplay();
@@ -211,19 +223,19 @@ export default function NodoUser() {
       )}
 
       <div className={`flex ${contentHeight}`}>
-        {/* Queue Information - DYNAMIC WIDTH BASED ON CAROUSEL VISIBILITY */}
+        {/* CRITICAL: Queue Information with maxTicketsDisplayed validation */}
         <div className={`${queueWidth} p-3 transition-all duration-500`}>
           <QueueDisplay
-            beingServedTickets={allTicketsForDisplay} // UPDATED: Pass all tickets (being served + completed today)
+            beingServedTickets={allTicketsForDisplay} // Pass all tickets (being served + completed today)
             waitingTickets={waitingTickets}
             employees={state.employees}
             highlightedTicket={highlightedTicket}
-            maxTicketsDisplayed={nodeConfig.maxTicketsDisplayed}
+            maxTicketsDisplayed={nodeConfig.maxTicketsDisplayed} // CRITICAL: Pass the limit from configuration
             showQueueInfo={nodeConfig.showQueueInfo}
             textColor={nodeConfig.textColor}
             accentColor={nodeConfig.accentColor}
-            ticketBeingServedColor={nodeConfig.ticketBeingServedColor} // NEW: Pass configurable color
-            ticketCompletedColor={nodeConfig.ticketCompletedColor} // NEW: Pass configurable color
+            ticketBeingServedColor={nodeConfig.ticketBeingServedColor}
+            ticketCompletedColor={nodeConfig.ticketCompletedColor}
             enableAnimations={nodeConfig.enableAnimations}
             isFullWidth={!nodeConfig.showCarousel}
           />

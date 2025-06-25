@@ -11,8 +11,8 @@ interface QueueDisplayProps {
   showQueueInfo: boolean;
   textColor: string;
   accentColor: string;
-  ticketBeingServedColor: string; // NEW: Configurable color for tickets being served
-  ticketCompletedColor: string; // NEW: Configurable color for completed tickets
+  ticketBeingServedColor: string;
+  ticketCompletedColor: string;
   enableAnimations: boolean;
   isFullWidth?: boolean;
 }
@@ -26,13 +26,13 @@ export default function QueueDisplay({
   showQueueInfo,
   textColor,
   accentColor,
-  ticketBeingServedColor, // NEW: Use configurable color
-  ticketCompletedColor, // NEW: Use configurable color
+  ticketBeingServedColor,
+  ticketCompletedColor,
   enableAnimations,
   isFullWidth = false
 }: QueueDisplayProps) {
 
-  // FIXED: Get today's completed tickets following the same ordering logic
+  // FIXED: Get today's completed tickets with proper ordering
   const getTodaysCompletedTickets = () => {
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -46,7 +46,6 @@ export default function QueueDisplay({
         new Date(ticket.completedAt) < endOfDay
       )
       .sort((a, b) => {
-        // CRITICAL: Same ordering logic as being served tickets
         // Most recently completed first (reverse chronological order)
         const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
         const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
@@ -54,24 +53,54 @@ export default function QueueDisplay({
       });
   };
 
-  // FIXED: Combine being served and completed tickets with proper ordering
+  // CRITICAL FIX: Combine and limit tickets according to maxTicketsDisplayed from NodeConfiguration
   const allTicketsToShow = () => {
+    const actualBeingServedTickets = beingServedTickets.filter(ticket => ticket.status === 'being_served');
     const todaysCompleted = getTodaysCompletedTickets();
     
-    // CRITICAL: Combine tickets following the scenario ordering:
-    // 1. Being served tickets (with highlighted ticket first)
-    // 2. Today's completed tickets (most recent first)
+    console.log('🎫 QUEUE DISPLAY: Processing tickets for display', {
+      beingServedCount: actualBeingServedTickets.length,
+      completedTodayCount: todaysCompleted.length,
+      maxTicketsDisplayed,
+      highlightedTicket
+    });
+    
+    // CRITICAL: Sort being served tickets with highlighted ticket first
+    const sortedBeingServed = actualBeingServedTickets.sort((a, b) => {
+      // PRIORITY 1: Highlighted ticket (newly called) ALWAYS goes first
+      if (highlightedTicket === a.id && highlightedTicket !== b.id) return -1;
+      if (highlightedTicket === b.id && highlightedTicket !== a.id) return 1;
+      
+      // PRIORITY 2: For non-highlighted tickets, sort by served time - MOST RECENT FIRST
+      const aTime = a.servedAt ? new Date(a.servedAt).getTime() : 0;
+      const bTime = b.servedAt ? new Date(b.servedAt).getTime() : 0;
+      return bTime - aTime; // Most recent (last called) first
+    });
+    
+    // CRITICAL VALIDATION: Ensure tickets in attention ALWAYS come before completed ones
+    // AND respect the maxTicketsDisplayed limit from NodeConfiguration
     const combinedTickets = [
-      ...beingServedTickets, // Already sorted with highlighted first
-      ...todaysCompleted     // Already sorted with most recent first
+      ...sortedBeingServed,     // Being served tickets FIRST (with highlighted first)
+      ...todaysCompleted        // Today's completed tickets SECOND (most recent first)
     ];
     
-    return combinedTickets.slice(0, maxTicketsDisplayed);
+    // VALIDATION: Apply the maximum limit from NodeConfiguration
+    const limitedTickets = combinedTickets.slice(0, maxTicketsDisplayed);
+    
+    console.log('✅ QUEUE DISPLAY: Final ticket list prepared', {
+      totalCombined: combinedTickets.length,
+      finalDisplayed: limitedTickets.length,
+      maxAllowed: maxTicketsDisplayed,
+      beingServedInFinal: limitedTickets.filter(t => t.status === 'being_served').length,
+      completedInFinal: limitedTickets.filter(t => t.status === 'completed').length
+    });
+    
+    return limitedTickets;
   };
 
   const ticketsToDisplay = allTicketsToShow();
 
-  // FIXED: Calculate exact height per ticket to avoid scroll
+  // FIXED: Calculate exact height per ticket to avoid scroll - respecting maxTicketsDisplayed
   const ticketHeight = `calc((100% - 120px) / ${maxTicketsDisplayed})`;
   const minTicketHeight = '60px';
 
@@ -83,16 +112,16 @@ export default function QueueDisplay({
       </h2>
       
       <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {/* UPDATED: Now shows both being served and completed tickets */}
+        {/* UPDATED: Display area with strict maxTicketsDisplayed validation */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-center space-x-2 mb-3">
             <Timer size={isFullWidth ? 20 : 18} style={{ color: accentColor }} />
             <h3 className={`${isFullWidth ? 'text-lg' : 'text-base'} font-bold text-center`} style={{ color: textColor }}>
-              Tickets en Atención
+              Tickets en Atención ({ticketsToDisplay.filter(t => t.status === 'being_served').length}) + Completados ({ticketsToDisplay.filter(t => t.status === 'completed').length})
             </h3>
           </div>
           
-          {/* FIXED: Vertical distribution with exact sizing - NO SCROLL */}
+          {/* CRITICAL FIX: Vertical distribution with EXACT maxTicketsDisplayed slots - NO MORE, NO LESS */}
           <div className="flex-1 flex flex-col space-y-2" style={{ height: 'calc(100% - 40px)' }}>
             {Array.from({ length: maxTicketsDisplayed }).map((_, index) => {
               const ticket = ticketsToDisplay[index];
@@ -134,14 +163,13 @@ export default function QueueDisplay({
                     height: ticketHeight,
                     minHeight: minTicketHeight,
                     maxHeight: '80px',
-                    // UPDATED: Use configurable colors from node configuration - NO OPACITY
+                    // Use configurable colors from node configuration - NO OPACITY
                     backgroundColor: isCompleted ? ticketCompletedColor : ticketBeingServedColor,
                     borderColor: isCompleted ? ticketCompletedColor : ticketBeingServedColor,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                    // REMOVED: opacity for completed tickets - now they have full opacity
                   }}
                 >
-                  {/* FIXED: Internal highlight effects - NO box resizing, only content animation */}
+                  {/* Internal highlight effects for being served tickets only */}
                   {isHighlighted && !isCompleted && (
                     <>
                       {/* Subtle background pulse - CONTAINED */}
@@ -154,9 +182,7 @@ export default function QueueDisplay({
                     </>
                   )}
 
-                  {/* REMOVED: Check icon for completed tickets - no longer showing completion icon */}
-                  
-                  {/* FIXED: SIMPLIFIED ticket content - ONLY basic info */}
+                  {/* SIMPLIFIED ticket content - ONLY basic info */}
                   <div className={`relative z-20 flex items-center justify-between w-full text-white ${
                     isHighlighted && enableAnimations && !isCompleted ? 'animate-pulse' : ''
                   }`}>
