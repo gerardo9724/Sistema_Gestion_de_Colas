@@ -23,8 +23,18 @@ const auth = getAuth(app);
 // Test connection function
 export const testFirebaseConnection = async (): Promise<boolean> => {
   try {
-    const { doc, getDoc } = await import('firebase/firestore');
-    const testDoc = await getDoc(doc(db, 'test', 'connection'));
+    const { doc, setDoc, getDoc } = await import('firebase/firestore');
+    
+    // First, try to create a test document to ensure we have write permissions
+    const testDocRef = doc(db, 'test', 'connection');
+    await setDoc(testDocRef, { 
+      timestamp: new Date(),
+      status: 'connected',
+      message: 'Firebase connection test successful'
+    });
+    
+    // Then try to read it back
+    const testDoc = await getDoc(testDocRef);
     console.log('✅ Firebase connection successful');
     return true;
   } catch (error) {
